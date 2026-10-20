@@ -1,0 +1,295 @@
+:root {
+  --bg:         #0b0f19;
+  --surface:    #0b0f19;
+  --border:     #1e2330;
+  --accent:     #82a0ff; /* 🔥 Switched to the neon blue Dashboard aura */
+  --danger:     #ff4f6a;
+  --text:       #e8eaf0;
+  --text-muted: #6b7280;
+  --text-dim:   #3a4055;
+  --mono:       'Space Mono', monospace;
+  --sans:       'Inter', 'DM Sans', sans-serif;
+  --radius:     14px;
+  --shadow:     0 0 40px rgba(130, 160, 255, 0.1); /* Blue glow */
+}
+
+*, *::before, *::after { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+}
+
+/* Ensure the blur overlay centers the card perfectly */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(11, 15, 25, 0.75); /* Dark blue tinted overlay */
+  backdrop-filter: blur(5px);
+}
+
+/* --- THE CARD FIX --- */
+.auth-modal-card {
+  width: 100%;
+  max-width: 420px; 
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  min-height: 560px; /* 🔥 This forces the card to always stay the same size */
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 36px 36px 32px;
+  box-shadow: var(--shadow);
+  z-index: 2001; 
+  animation: modalPop 0.3s cubic-bezier(0.17, 0.89, 0.32, 1.28);
+}
+
+.screen { 
+  display: none; 
+  flex-direction: column;
+  flex-grow: 1; /* Pushes content to fill the fixed height */
+}
+.screen.active { 
+  display: flex; 
+}
+
+/* Brand Logo inside Login */
+.auth-brand-logo {
+  display: flex;
+  align-items: center;
+  /* gap: 8px; */
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 24px;
+  margin-left: 100px;
+}
+.auth-brand-logo span { color: var(--accent); }
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px; 
+  margin-bottom: 28px; 
+  gap: 4px;
+}
+
+.tab-btn {
+  flex: 1; 
+  padding: 10px; 
+  border: none; 
+  background: transparent;
+  color: var(--text-muted); 
+  font-family: var(--sans);
+  font-size: 14px; 
+  font-weight: 600; 
+  border-radius: 7px;
+  cursor: pointer; 
+  transition: all 0.2s; 
+}
+
+.tab-btn.active { 
+  background: var(--accent); 
+  color: #000; 
+}
+
+.tab-btn:not(.active):hover { 
+  color: var(--text); 
+  background: var(--border); 
+}
+
+/* Form Styles */
+.screen-title {
+  font-family: var(--sans); 
+  font-size: 22px; 
+  font-weight: 700;
+  margin-bottom: 4px; 
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+
+.screen-subtitle {
+  font-size: 13px; 
+  color: var(--text-muted); 
+  margin-bottom: 28px; 
+  line-height: 1.5;
+}
+
+.form-group { margin-bottom: 16px; }
+
+label {
+  display: block; 
+  font-family: var(--sans); 
+  font-size: 12px; 
+  font-weight: 600;
+  text-transform: uppercase; 
+  color: var(--text-muted); 
+  margin-bottom: 6px;
+}
+
+.input-wrap { position: relative; }
+
+/* Input Fields */
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 14px 44px 14px 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--accent);
+  background: rgba(130, 160, 255, 0.05);
+  box-shadow: 0 0 0 3px rgba(130, 160, 255, 0.1); /* Blue glow focus */
+}
+
+input::placeholder { color: var(--text-dim); }
+
+/* Eye Visibility Toggle Button */
+.eye-btn {
+  position: absolute;
+  right: 13px; 
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  z-index: 2;
+}
+
+.eye-btn:hover { color: var(--accent); }
+
+.eye-btn svg {
+  width: 18px; height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Password Strength Indicator */
+.strength-bar { 
+  display: flex; gap: 4px; margin-top: 8px; 
+}
+.strength-seg {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: var(--border); 
+  transition: background 0.3s ease;
+}
+.strength-seg.weak { background: var(--danger); }
+.strength-seg.medium { background: #f5a623; }
+.strength-seg.strong { background: var(--accent); } /* Glows blue on strong */
+
+.strength-label { 
+  font-size: 11px; color: var(--text-muted); 
+  margin-top: 6px; font-family: var(--mono); 
+}
+
+/* Action Buttons */
+.btn-primary {
+  width: 100%; 
+  padding: 14px; 
+  background: var(--accent); 
+  color: #0b0f19; /* Dark text for contrast against the neon blue */
+  border: none; 
+  border-radius: 10px; 
+  font-family: var(--sans);
+  font-size: 14px; 
+  font-weight: 700; 
+  cursor: pointer; 
+  margin-top: 8px;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover:not(:disabled)  { background: #9db5ff; transform: translateY(-1px); }
+.btn-primary:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Alerts */
+.alert {
+  padding: 12px 14px; border-radius: 10px; font-size: 13px;
+  margin-top: 16px; display: none; align-items: flex-start; gap: 10px; line-height: 1.5;
+}
+.alert.show { display: flex; animation: fadeSlideIn 0.3s ease both; }
+.alert-success { background: rgba(130, 160, 255, 0.08); border: 1px solid rgba(130, 160, 255, 0.25); color: var(--accent); }
+.alert-error { background: rgba(255,79,106,0.08); border: 1px solid rgba(255,79,106,0.25); color: var(--danger); }
+
+.exit-btn {
+  position: absolute; top: 15px; right: 15px; background: none; border: none;
+  color: var(--text-muted); font-size: 24px; cursor: pointer; transition: color 0.2s;
+}
+.exit-btn:hover { color: var(--danger); }
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Admin Mode Toggle Link --- */
+.auth-access-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.admin-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--mono); /* Using the monospace font for a terminal vibe */
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.admin-toggle-btn:hover {
+  color: #82a0ff; /* That tactical amber color */
+  text-decoration: underline;
+}
+
+.admin-toggle-btn[aria-pressed="true"] {
+  color: #82a0ff;
+}
+
+@media (max-width: 480px) {
+  .auth-modal-card { padding: 30px 22px 24px; }
+  .auth-access-switch { gap: 10px; }
+  .admin-toggle-btn { font-size: 10px; }
+}

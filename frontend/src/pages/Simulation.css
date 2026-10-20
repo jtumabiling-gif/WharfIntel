@@ -1,0 +1,842 @@
+/* ==========================================================================
+   WHARFINTEL SIMULATION - MASTER STYLESHEET
+   ========================================================================== */
+
+/* 1. Root Variables & Theme Modes */
+:root {
+  --bg-main: #0a0c10;
+  --bg-panel: rgba(17, 20, 27, 0.75);
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --text-primary: #e8eaf0;
+  --text-secondary: #94a3b8;
+  --text-muted: #6b7280;
+  --border-color: rgba(130, 160, 255, 0.15); 
+  --border-heavy: rgba(130, 160, 255, 0.3);
+  --accent-blue: #82a0ff; 
+  --accent-green: #2ecc71; /* Kept only for specific alert states */
+  --font-mono: 'Space Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+
+.sim-wrapper.light-mode {
+  --bg-main: #f0f2f5; 
+  --bg-panel: rgba(255, 255, 255, 0.85); 
+  --bg-card: #f9fafb; 
+  --text-primary: #111827 !important; 
+  --text-secondary: #6b7280 !important; 
+  --text-muted: #9ca3af;
+  --border-color: rgba(99, 102, 241, 0.2);
+  --accent-blue: #6366f1;
+  --accent-green: #2ecc71; /* Kept only for specific alert states */
+}
+
+/* 2. Fullscreen Layout & Leaflet Overrides */
+.sim-wrapper { position: relative; height: 100vh; width: 100vw; background-color: var(--bg-main); color: var(--text-primary); font-family: var(--font-mono); overflow: hidden; transition: background-color 0.3s ease; }
+.sim-map-fullscreen { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+.leaflet-container { height: 100%; width: 100%; background: var(--bg-main); }
+.leaflet-popup-content-wrapper { background: var(--bg-panel) !important; color: var(--text-primary) !important; border: 1px solid var(--border-heavy); border-radius: 8px !important; }
+.leaflet-popup-tip { background: var(--bg-panel) !important; border: 1px solid var(--border-heavy); }
+
+/* 3. Map Controls & UI Overlays (Radar, Zoom, Theme, Exit) */
+.radar-grid-overlay {
+  position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 400; 
+  background-image: linear-gradient(rgba(130, 160, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(130, 160, 255, 0.04) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+.sim-wrapper.light-mode .radar-grid-overlay {
+  background-image: linear-gradient(rgba(99, 102, 241, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
+}
+.sim-map-controls { 
+  position: absolute; 
+  top: 90px;          /* Tucked cleanly below the Exit/Black Market buttons */
+  left: 25px;         /* Anchored to the left margin */
+  right: auto; 
+  bottom: auto;
+  z-index: 1000; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 8px; 
+}
+.control-btn { width: 40px; height: 40px; background: var(--bg-panel); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; font-size: 20px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); transition: all 0.2s ease; backdrop-filter: blur(8px); }
+.control-btn:hover { background: var(--bg-card); transform: scale(1.05); }
+.theme-toggle-btn { margin-top: 10px; font-size: 16px; }
+.sim-exit-btn { position: absolute; top: 25px; left: 25px; width: 45px; height: 45px; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-secondary); font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2000; backdrop-filter: blur(8px); transition: all 0.3s ease; }
+.sim-exit-btn:hover { background: rgba(239, 68, 68, 0.1); border-color: #ef4444; color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+
+/* 4. Top HUD (Credits, Reputation, Income) */
+.stats-hud { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; gap: 30px; background: var(--bg-panel); backdrop-filter: blur(20px); padding: 12px 30px; border-radius: 50px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); align-items: center; }
+.stat-item { display: flex; align-items: center; gap: 12px; }
+.stat-item .label { color: var(--text-secondary); font-size: 0.8rem; font-weight: 700; letter-spacing: 1.5px; font-family: var(--font-mono); }
+.stat-item .value.money { color: var(--accent-blue) !important; font-weight: bold; font-size: 1.1rem; font-family: var(--font-mono); text-shadow: 0 0 10px var(--border-color); }
+.rep-bar-container { width: 100px; height: 8px; background: var(--border-heavy); border-radius: 10px; overflow: hidden; }
+.rep-bar-fill { height: 100%; background: var(--accent-blue) !important; transition: width 0.5s ease-out; box-shadow: 0 0 10px var(--border-color); }
+.floating-income-text { color: var(--accent-blue) !important; font-weight: bold; text-shadow: 0 0 10px var(--border-color); font-family: var(--font-mono); animation: floatUp 1s ease-out forwards; position: absolute; pointer-events: none; font-size: 18px; }
+@keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
+
+/* 5. Bottom Action Bar & Navigation */
+.sim-bottom-bar { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; padding: 10px 20px; border-radius: 30px; background: var(--bg-panel); backdrop-filter: blur(16px); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); z-index: 2000; }
+.action-btn { background: transparent; color: var(--text-secondary); border: 1px solid transparent; padding: 10px 20px; border-radius: 30px; font-family: var(--font-mono); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.action-btn.active-blue { background: var(--accent-blue); color: #fff !important; border-color: var(--accent-blue); box-shadow: 0 0 20px rgba(130, 160, 255, 0.4); }
+.action-btn:hover:not(.disabled):not(.active-blue) { background: rgba(130, 160, 255, 0.1); color: var(--text-primary); border-color: rgba(130, 160, 255, 0.5); box-shadow: inset 0 0 10px rgba(130, 160, 255, 0.2); }
+.action-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.pulsing-dot-blue { display: inline-block; width: 8px; height: 8px; background-color: var(--accent-blue); border-radius: 50%; margin-left: 8px; animation: pulseGlowBlue 1.5s infinite; }
+@keyframes pulseGlowBlue { 0% { box-shadow: 0 0 0 0 rgba(130, 160, 255, 0.7); } 70% { box-shadow: 0 0 0 6px rgba(130, 160, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(130, 160, 255, 0); } }
+.tracking-active-pulse { position: relative; font-weight: bold; text-shadow: 0 0 10px rgba(130, 160, 255, 0.8); }
+
+/* 6. Floating Side Panels & Badges */
+.floating-side-panel { 
+  position: absolute; top: 25px; right: 24px; width: 350px; 
+  max-height: calc(100vh - 100px); background: var(--bg-panel); 
+  backdrop-filter: blur(20px); border: 1px solid var(--border-color); 
+  border-radius: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25); 
+  z-index: 1500; display: flex; flex-direction: column; padding: 16px 20px; 
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1); 
+  overflow: hidden; /* 🔥 FIX: Locks the panel size */
+}
+
+/* 🔥 THE WARP GLIDE FIX: Smoothly interpolate Leaflet marker movements */
+.sim-vessel-icon {
+  /* Tells the browser to smoothly animate coordinate jumps over exactly 1 second */
+  transition: transform 1s linear !important;
+  will-change: transform;
+}
+
+/* CRITICAL: We must disable the smooth glide when the user zooms the map, 
+   otherwise the icons will float away from the map tiles temporarily! */
+.leaflet-zoom-anim .sim-vessel-icon,
+.leaflet-pan-anim .sim-vessel-icon {
+  transition: none !important;
+}
+
+.floating-side-panel::-webkit-scrollbar { width: 4px; }
+.floating-side-panel::-webkit-scrollbar-thumb { background: var(--border-heavy); border-radius: 4px; }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.panel-header h3 { margin: 0; font-size: 16px; color: var(--accent-blue); font-family: var(--font-sans); }
+.vessel-count { background: rgba(130, 160, 255, 0.1); color: var(--accent-blue); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
+.badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+.badge.docked { color: var(--accent-blue); background: rgba(130, 160, 255, 0.1); }
+.badge.outbound { color: #0ea5e9; background: rgba(14, 165, 233, 0.1); }
+.badge.failed { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+/* 🔥 NEW: Scrollable areas for Lists and Timelines */
+.traffic-list { display: flex; flex-direction: column; gap: 12px; flex: 1; overflow-y: auto; padding-right: 8px; margin-right: -8px; }
+.scrollable-timeline-container { flex: 1; overflow-y: auto; padding-right: 12px; margin-right: -12px; margin-top: 10px; }
+.traffic-list::-webkit-scrollbar, .scrollable-timeline-container::-webkit-scrollbar { width: 4px; }
+.traffic-list::-webkit-scrollbar-thumb, .scrollable-timeline-container::-webkit-scrollbar-thumb { background: var(--border-heavy); border-radius: 4px; }
+
+/* 🔥 NEW: Muted styling for pending timeline steps */
+.timeline-step.pending { opacity: 0.5; }
+.timeline-step.pending .step-timestamp .date,
+.timeline-step.pending .step-timestamp .time,
+.timeline-step.pending .step-content strong,
+.timeline-step.pending .step-content p { color: var(--text-muted) !important; }
+.timeline-step.pending .step-dot { background-color: var(--border-heavy) !important; box-shadow: none !important; }
+.timeline-step.pending .step-line { background-color: var(--border-heavy) !important; }
+
+/* 7. Facility Ops & Hub Upgrades */
+.traffic-list { display: flex; flex-direction: column; gap: 12px; }
+.upgrade-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; transition: all 0.2s; }
+.upgrade-card:hover { border-color: var(--accent-blue); box-shadow: 0 0 10px rgba(130, 160, 255, 0.1); }
+.upgrade-card.active-booster { border-color: var(--accent-blue); box-shadow: 0 0 10px rgba(130, 160, 255, 0.2); }
+.tc-top { display: flex; justify-content: space-between; align-items: center; }
+.tc-top h4 { margin: 0; font-size: 14px; color: var(--text-primary); font-family: var(--font-mono); }
+.price-badge { background: rgba(59, 130, 246, 0.1); color: #60a5fa; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; font-family: var(--font-mono); }
+.upgrade-desc { font-size: 12px; color: var(--accent-blue) !important; margin: 0; line-height: 1.4; font-family: var(--font-sans); font-weight: bold; }
+.upgrade-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
+.income-tag { font-size: 12px; color: var(--accent-blue); font-weight: bold; font-family: var(--font-mono); }
+.buy-btn-mini { background: var(--accent-blue); color: #000; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; font-family: var(--font-mono); transition: all 0.2s; }
+.buy-btn-mini:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(130, 160, 255, 0.3); }
+.buy-btn-mini:disabled { background: var(--border-heavy); color: var(--text-muted); cursor: not-allowed; }
+
+/* 8. Logistics Export Form */
+.sim-export-form { display: flex; flex-direction: column; gap: 12px; } 
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { position: relative; left: 0px; font-size: 0.75rem; color: var(--text-secondary) !important; text-transform: uppercase; font-weight: bold; }
+.modern-input, .modern-select { width: 100%; padding: 8px 12px; background: var(--bg-card) !important; border: 1px solid var(--border-color) !important; border-radius: 6px; color: var(--text-primary) !important; font-size: 0.85rem; box-sizing: border-box; transition: border 0.2s;}
+.modern-input:focus, .modern-select:focus { border-color: var(--accent-blue); outline: none; box-shadow: 0 0 8px rgba(130, 160, 255, 0.2); }
+.form-row { display: flex; gap: 10px; }
+.cost-tag { color: var(--accent-blue); font-family: var(--font-mono); font-size: 14px; margin-top: 5px; background: rgba(130, 160, 255, 0.1) !important; padding: 8px; border-radius: 6px; font-weight: bold; text-align: center; }
+.btn-launch-sim { background: var(--accent-blue); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer; margin-top: 5px; transition: all 0.2s; box-shadow: 0 4px 10px rgba(130, 160, 255, 0.2);}
+.btn-launch-sim:hover:not(:disabled) { background: #6b8cff; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(130, 160, 255, 0.4); }
+.btn-launch-sim:disabled { background: var(--border-heavy); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
+.btn-launch-sim.state-deployed:disabled { background: rgba(245, 158, 11, 0.05); color: #f59e0b; border: 1px dashed rgba(245, 158, 11, 0.4); animation: waitingPulse 1.5s infinite alternate ease-in-out; }
+@keyframes waitingPulse { 0% { opacity: 0.6; box-shadow: inset 0 0 5px rgba(245, 158, 11, 0); } 100% { opacity: 1; box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.8); } }
+
+/* 9. Shopee Style Timeline */
+.shopee-timeline { display: flex; flex-direction: column-reverse; padding: 10px 5px; margin-top: 15px; }
+.timeline-step { display: flex; position: relative; padding-bottom: 25px; opacity: 0.4; transition: all 0.3s ease; }
+.timeline-step.completed { opacity: 1; }
+.step-timestamp { width: 45px; display: flex; flex-direction: column; align-items: flex-end; padding-right: 12px; font-family: var(--font-sans); }
+.step-timestamp .date { font-size: 11px; font-weight: bold; color: var(--text-primary); text-align: right; }
+.step-timestamp .time { font-size: 10px; color: var(--text-muted); }
+.step-indicator { display: flex; flex-direction: column; align-items: center; margin-right: 15px; position: relative; width: 20px; }
+.step-dot { position: relative; right: 4px; width: 12px; height: 12px; border-radius: 50%; background-color: var(--border-heavy); z-index: 2; }
+.step-line { position: absolute; top: 12px; bottom: -25px; left: 5px; width: 2px; background-color: var(--border-heavy); z-index: 1; }
+.timeline-step:last-child .step-line { display: none; }
+.step-content { flex: 1; transform: translateY(-4px); }
+.step-content strong { display: block; font-size: 0.95rem; color: var(--text-primary); margin-bottom: 4px; }
+.step-content p { margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.3; }
+.step-time { color: var(--accent-blue) !important; font-size: 0.75rem; margin-top: 4px; display: block; }
+.timeline-step.completed.truck-step .step-dot { background-color: var(--accent-blue) !important; box-shadow: 0 0 8px var(--border-heavy) !important; }
+.timeline-step.completed.truck-step .step-line { background-color: var(--accent-blue) !important; }
+.timeline-step.completed.ship-step .step-dot { background-color: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); }
+.timeline-step.completed.ship-step .step-line { background-color: #3b82f6; }
+/* 🔥 THE FIX: In column-reverse, the first DOM child is visually at the bottom! */
+.shopee-timeline .timeline-step:first-child .step-line { display: none; }
+.shopee-timeline .timeline-step:last-child .step-line { display: block; }
+
+/* 10. Diegetic Terminal */
+.tactical-terminal { position: absolute; bottom: 30px; left: 25px; width: 320px; height: 140px; background: rgba(5, 7, 10, 0.8); border: 1px solid var(--border-color); border-left: 3px solid var(--accent-blue); border-radius: 8px; padding: 10px; z-index: 2000; display: flex; flex-direction: column; overflow-y: auto; backdrop-filter: blur(10px); }
+
+/* 🔥 Terminal Scrollbar */
+.tactical-terminal::-webkit-scrollbar { width: 4px; }
+.tactical-terminal::-webkit-scrollbar-thumb { background: rgba(130, 160, 255, 0.3); border-radius: 4px; }
+
+/* 🔥 The Target HUD Overlay (Replaced Minimap) */
+.target-hud-overlay {
+  position: absolute; top: 25px; left: 25px; width: 280px;
+  background: var(--bg-panel); border: 1px solid var(--border-color);
+  border-radius: 12px; z-index: 1000; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: popoverFade 0.3s ease-out; backdrop-filter: blur(16px);
+}
+
+.terminal-line { font-family: var(--font-mono); font-size: 10px; color: var(--accent-blue); margin: 2px 0; opacity: 0.8; animation: typeLine 0.2s ease-out; }
+.terminal-line .timestamp { color: var(--text-muted); margin-right: 8px; }
+.terminal-line.highlight { color: var(--accent-green) !important; font-weight: bold; }
+.terminal-line.warning { color: #f1c40f; }
+.terminal-line.danger { color: #ef4444; }
+@keyframes typeLine { from { opacity: 0; transform: translateX(-5px); } to { opacity: 0.8; transform: translateX(0); } }
+
+/* 11. Interactive Menus & Timeskip */
+.time-popover-wrapper { position: relative; display: flex; align-items: center; }
+.time-menu-dropdown { position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: var(--bg-panel); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 5px; width: 150px; box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.3); animation: popoverFade 0.2s ease-out; }
+@keyframes popoverFade { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.time-opt-btn { background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 10px; text-align: center; font-family: var(--font-mono); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+.time-opt-btn:hover { background: rgba(130, 160, 255, 0.1); color: var(--text-primary); }
+.time-opt-btn.active-blue { background: var(--accent-blue); color: #fff !important; border-color: var(--accent-blue); font-weight: bold; }
+
+/* 12. Modals (Exit, Chaos) */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 9999; display: flex; justify-content: center; align-items: center; }
+
+/* EXIT CONFIRMATION MODAL (Restored) */
+.confirmation-modal { background: var(--bg-panel); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 32px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 0 40px rgba(239, 68, 68, 0.1); }
+.confirmation-modal h3 { margin: 0 0 12px 0; color: var(--text-primary); font-size: 20px; }
+.confirmation-modal p { color: var(--text-secondary); font-size: 14px; margin: 0 0 24px 0; line-height: 1.5; }
+.modal-actions { display: flex; gap: 12px; }
+.modal-actions button { flex: 1; padding: 12px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; text-transform: uppercase; }
+.btn-cancel { background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); }
+.btn-cancel:hover { background: var(--bg-card); }
+.btn-confirm-exit { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.5); color: #ef4444; }
+.btn-confirm-exit:hover { background: #ef4444; color: #fff; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+
+/* 🔥 ELITE TACTICAL MODAL DESIGN (New) */
+.chaos-modal { 
+  background: rgba(10, 12, 16, 0.95) !important; 
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.1); 
+  border-top: 4px solid #f1c40f; 
+  border-radius: 16px; 
+  padding: 40px; 
+  width: 500px; 
+  text-align: center; 
+  position: relative; 
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); 
+}
+@keyframes modalShake { from { transform: rotate(-0.5deg); } to { transform: rotate(0.5deg); } }
+
+/* 🔥 THE SCRAMBLE FIX: Explicit line-height prevents letters from crushing */
+.warning-title { 
+  font-family: var(--font-mono); 
+  letter-spacing: 3px; 
+  line-height: 1.4 !important; 
+  margin: 0 0 15px 0 !important;
+  font-size: 28px;
+  text-transform: uppercase;
+}
+
+.chaos-actions { display: flex; gap: 15px; margin-top: 30px; }
+
+/* 🔥 MODERN GHOST BUTTONS WITH GLOW HOVERS */
+.btn-push { 
+  background: rgba(255, 255, 255, 0.02); 
+  color: #fff; 
+  border: 1px solid rgba(255, 255, 255, 0.1); 
+  padding: 18px 12px; 
+  border-radius: 12px; 
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700; 
+  letter-spacing: 1px;
+  cursor: pointer; 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-push:hover { transform: translateY(-4px); }
+
+.btn-subtext { 
+  font-size: 11px; 
+  opacity: 0.7; 
+  margin-top: 8px; 
+  font-family: var(--font-sans);
+  font-weight: normal;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+/* Color Themes for the Tactical Buttons */
+.btn-push.danger-btn { border-color: rgba(231, 76, 60, 0.4); color: #ff7675; }
+.btn-push.danger-btn:hover { background: rgba(231, 76, 60, 0.15); border-color: #e74c3c; box-shadow: 0 10px 25px rgba(231, 76, 60, 0.3); color: #fff; }
+
+.btn-push.warning-btn { border-color: rgba(243, 156, 18, 0.4); color: #f39c12; }
+.btn-push.warning-btn:hover { background: rgba(243, 156, 18, 0.15); border-color: #f1c40f; box-shadow: 0 10px 25px rgba(243, 156, 18, 0.3); color: #fff; }
+
+.btn-push.info-btn { border-color: rgba(52, 152, 219, 0.4); color: #74b9ff; }
+.btn-push.info-btn:hover { background: rgba(52, 152, 219, 0.15); border-color: #3498db; box-shadow: 0 10px 25px rgba(52, 152, 219, 0.3); color: #fff; }
+
+.btn-push.neutral-btn { border-color: rgba(149, 165, 166, 0.4); color: #bdc3c7; }
+.btn-push.neutral-btn:hover { background: rgba(149, 165, 166, 0.15); border-color: #95a5a6; box-shadow: 0 10px 25px rgba(149, 165, 166, 0.2); color: #fff; }
+
+.btn-cancel-tactical {
+  background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); width: 100%; padding: 14px; margin-top: 25px; border-radius: 8px; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase; letter-spacing: 2px; cursor: pointer; transition: all 0.2s;
+}
+.btn-cancel-tactical:hover { background: rgba(255, 255, 255, 0.05); color: #fff; border-color: var(--text-secondary); }
+
+/* RELAUNCH MAP POPUP UI (Restored) */
+.relaunch-container { margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(241, 196, 15, 0.3); text-align: center; }
+.relaunch-warning-text { color: #f59e0b !important; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 10px; }
+.btn-launch-sim.relaunch-btn { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid #f59e0b; padding: 8px 12px; font-size: 12px; border-radius: 6px; width: 100%; transition: all 0.2s ease-in-out; cursor: pointer; }
+.btn-launch-sim.relaunch-btn:hover:not(:disabled) { background: #f59e0b; color: #fff; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+
+/* 13. Fix the Notification Modal so it obeys Light Mode */
+.custom-notification {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid;
+  border-radius: 8px;
+  padding: 24px 30px;
+  width: 420px;
+  text-align: left;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  animation: slideInFade 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+@keyframes slideInFade { from { opacity: 0; transform: translateY(-20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.custom-notification.success { border-left-color: var(--accent-blue); box-shadow: 0 0 20px rgba(130, 160, 255, 0.2); }
+.custom-notification.error { border-left-color: #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+.notif-header { display: flex; align-items: center; gap: 15px; margin-bottom: 12px; }
+.notif-icon { font-size: 1.5rem; background: var(--bg-card) !important; padding: 8px; border-radius: 8px; }
+.custom-notification h3 { margin: 0; font-size: 1.1rem; color: var(--text-primary) !important; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+.custom-notification .notif-message { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-bottom: 24px; font-family: var(--font-mono); }
+.notif-ack-btn { background: var(--bg-card) !important; color: var(--text-primary) !important; border: 1px solid var(--border-color) !important; padding: 12px 20px; border-radius: 6px; font-family: var(--font-mono); font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; transition: all 0.2s; align-self: flex-end; }
+.notif-ack-btn:hover { background: var(--border-heavy) !important; }
+.custom-notification.success .notif-ack-btn:hover { background: var(--accent-blue) !important; color: #fff !important; border-color: var(--accent-blue) !important; }
+
+/* 14. Global Light Mode Adjustments */
+
+/* Removed .tactical-terminal from this block so it doesn't turn white */
+.sim-wrapper.light-mode .sim-bottom-bar,
+.sim-wrapper.light-mode .floating-side-panel,
+.sim-wrapper.light-mode .custom-notification,
+.sim-wrapper.light-mode .custom-popup .leaflet-popup-content-wrapper,
+.sim-wrapper.light-mode .custom-popup .leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+  color: #111827 !important;
+}
+
+/* 🔥 NEW: Keep the terminal dark and tactical even in Light Mode! */
+.sim-wrapper.light-mode .tactical-terminal {
+  background: rgba(15, 23, 42, 0.85) !important; /* Deep slate */
+  border: 1px solid rgba(99, 102, 241, 0.4) !important;
+  border-left: 3px solid #82a0ff !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+.sim-wrapper.light-mode .tactical-terminal .terminal-line.highlight { color: var(--accent-green) !important; }
+.sim-wrapper.light-mode .tactical-terminal .timestamp { color: #94a3b8 !important; }
+
+/* 🔥 NEW: Make the Cost Tag pop in Light Mode */
+.sim-wrapper.light-mode .cost-tag {
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: var(--accent-blue) !important;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+/* Existing Light Mode overrides */
+.sim-wrapper.light-mode .stats-hud { background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(99, 102, 241, 0.3); }
+.sim-wrapper.light-mode .action-btn.active-blue { box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
+.sim-wrapper.light-mode .action-btn:hover:not(.disabled):not(.active-blue) { background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.4); }
+.sim-wrapper.light-mode .btn-launch-sim { color: #fff; }
+.sim-wrapper.light-mode .time-opt-btn.active-blue { color: #fff !important; }
+
+/* 🔥 The Cinematic AUTO Toggle Button */
+.btn-auto-toggle {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-auto-toggle:hover {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+  box-shadow: 0 0 10px rgba(130, 160, 255, 0.2);
+}
+.btn-auto-toggle.active {
+  background: rgba(130, 160, 255, 0.15);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 15px rgba(130, 160, 255, 0.4);
+  animation: autoPulse 2s infinite;
+}
+
+@keyframes autoPulse {
+  0% { box-shadow: 0 0 0 0 rgba(130, 160, 255, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(130, 160, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(130, 160, 255, 0); }
+}
+
+/* ==========================================================================
+   15. BLACK MARKET BOOSTER SHOP (UI ONLY)
+   ========================================================================== */
+
+/* The Trigger Button (Top Left) */
+.sim-booster-btn {
+  position: absolute;
+  top: 25px;
+  left: 85px; /* Positions it right next to the exit button */
+  background: rgba(241, 196, 15, 0.1);
+  border: 1px solid rgba(241, 196, 15, 0.4);
+  color: #f1c40f;
+  height: 45px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  z-index: 2000;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 0 15px rgba(241, 196, 15, 0.1);
+}
+.sim-booster-btn:hover {
+  background: #f1c40f;
+  color: #000;
+  box-shadow: 0 0 20px rgba(241, 196, 15, 0.4);
+  transform: translateY(-2px);
+}
+
+/* The Modal Container */
+.boosters-modal {
+  background: var(--bg-panel);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(130, 160, 255, 0.2);
+  border-top: 4px solid #f1c40f;
+  border-radius: 16px;
+  padding: 30px;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+  animation: modalSlideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modalSlideDown {
+  from { opacity: 0; transform: translateY(-30px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.boosters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.close-booster-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.close-booster-btn:hover { color: #ef4444; }
+
+/* The Grid & Cards */
+.boosters-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.booster-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 15px;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+.booster-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(241, 196, 15, 0.3);
+}
+
+.booster-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.booster-info { flex: 1; text-align: left; }
+.booster-info h4 { margin: 0 0 5px 0; color: var(--text-primary); font-size: 15px; text-transform: uppercase; font-family: var(--font-mono); }
+.booster-info p { margin: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+
+.booster-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 100px;
+}
+
+.booster-price {
+  font-family: var(--font-mono);
+  font-weight: bold;
+  font-size: 14px;
+  color: #3498db;
+}
+.booster-price.cost-rep { color: #e74c3c; }
+
+.booster-action button {
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+  border: 1px solid #3498db;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.booster-action button:hover {
+  background: #3498db;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(52, 152, 219, 0.4);
+}
+
+.booster-action button.sell-btn {
+  background: rgba(46, 204, 113, 0.1);
+  color: #2ecc71;
+  border-color: #2ecc71;
+}
+.booster-action button.sell-btn:hover {
+  background: #2ecc71;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(46, 204, 113, 0.4);
+}
+
+/* Light Mode Overrides for Boosters */
+.sim-wrapper.light-mode .sim-booster-btn {
+  background: #fff; color: #d4ac0d; border-color: rgba(241, 196, 15, 0.5); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.sim-wrapper.light-mode .sim-booster-btn:hover { background: #f1c40f; color: #fff; }
+.sim-wrapper.light-mode .boosters-modal { background: rgba(255, 255, 255, 0.95); border-color: rgba(0,0,0,0.1); }
+.sim-wrapper.light-mode .boosters-header h2 { color: #d4ac0d !important; }
+.sim-wrapper.light-mode .booster-card { background: #f8f9fa; border-color: #e5e7eb; }
+.sim-wrapper.light-mode .booster-card:hover { border-color: #f1c40f; background: #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+.sim-wrapper.light-mode .booster-info h4 { color: #111827; }
+
+/* ==========================================================================
+   16. MACRO-CLIMATE WEATHER HUD (PILL & MODAL)
+   ========================================================================== */
+
+/* --- The Clickable Pill (Bottom Left) --- */
+.weather-hud-pill {
+  position: absolute;
+  bottom: 175px; 
+  left: 25px;
+  background: rgba(5, 7, 10, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  z-index: 2000;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  transition: all 0.2s ease-in-out;
+}
+
+.weather-hud-pill:hover {
+  background: rgba(130, 160, 255, 0.1);
+  border-color: var(--accent-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+}
+
+.weather-timer-box {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--accent-blue);
+  font-weight: bold;
+  margin-left: auto; /* Pushes it to the far right of the pill */
+}
+
+/* --- The Centered Modal --- */
+.weather-modal {
+  background: #0a0c10; 
+  border: 1px solid rgba(130, 160, 255, 0.2);
+  border-radius: 16px; 
+  width: 100%; 
+  max-width: 480px;
+  padding: 35px 30px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6); 
+  position: relative;
+  font-family: var(--font-sans);
+  animation: modalSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.weather-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 15px;
+}
+
+.weather-modal-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.risk-badge {
+  padding: 6px 12px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: bold;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Keep your existing metrics, forecast grid, and legend styles */
+.weather-metrics {
+  display: flex;
+  justify-content: space-between;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric .label {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.metric .value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.weather-forecast {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.forecast-title {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.forecast-item {
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 3px solid;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.forecast-item .time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.forecast-item .risk {
+  font-size: 14px;
+  font-weight: bold;
+  font-family: var(--font-mono);
+}
+
+/* WEATHER HUD LEGEND */
+.weather-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.legend-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  margin: 0 0 8px 0;
+  line-height: 1.5;
+}
+
+.legend-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.legend-item span {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+.legend-item p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+}
+
+/* Light Mode Overrides */
+.sim-wrapper.light-mode .weather-hud-pill {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+.sim-wrapper.light-mode .weather-modal {
+  background: #ffffff;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+.sim-wrapper.light-mode .forecast-item { background: rgba(0, 0, 0, 0.03); }
+
+/* ==========================================================================
+   17. MACRO-CLIMATE MAP OVERLAYS
+   ========================================================================== */
+
+/* The base overlay layer (invisible during NOMINAL weather) */
+.climate-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none; /* Crucial: Lets you click the map beneath it */
+  z-index: 450; /* Sits above the radar grid, but below the UI */
+  transition: all 3s ease-in-out; /* Super smooth 3-second weather transitions */
+  background-size: 200% 200%;
+  opacity: 0;
+}
+
+/* ⚠️ DETERIORATING WEATHER: Subtle dark/yellowish gradient moving slowly */
+.sim-wrapper.weather-deteriorating .climate-overlay {
+  opacity: 0.35;
+  background: radial-gradient(circle at 50% 50%, transparent 10%, rgba(241, 196, 15, 0.05) 50%, rgba(10, 12, 16, 0.5) 100%);
+  animation: stormDrift 20s infinite alternate ease-in-out;
+}
+
+/* 🚨 CYCLONE IMMINENT: Heavy, dark, reddish-storm overlay with fast movement */
+.sim-wrapper.weather-cyclone-imminent .climate-overlay {
+  opacity: 0.7;
+  background: radial-gradient(circle at 50% 50%, rgba(231, 76, 60, 0.05) 0%, rgba(10, 12, 16, 0.6) 50%, rgba(5, 7, 10, 0.95) 100%);
+  animation: cycloneDrift 10s infinite alternate ease-in-out;
+}
+
+/* Base map transition so the physical tiles darken smoothly */
+.sim-wrapper .leaflet-container {
+  transition: filter 3s ease-in-out;
+}
+
+/* Dim the physical map tiles slightly during bad weather */
+.sim-wrapper.weather-deteriorating .leaflet-container {
+  filter: brightness(0.85) sepia(0.1);
+}
+
+/* Severely dim and wash out the map tiles during a cyclone */
+.sim-wrapper.weather-cyclone-imminent .leaflet-container {
+  filter: brightness(0.65) contrast(1.15) grayscale(0.3);
+}
+
+/* Animations for the cloud drift effect */
+@keyframes stormDrift {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+
+@keyframes cycloneDrift {
+  0% { background-position: 0% 50%; transform: scale(1); }
+  50% { background-position: 100% 50%; transform: scale(1.05); }
+  100% { background-position: 50% 100%; transform: scale(1); }
+}
+
+/* Light Mode Overrides for Climate */
+.sim-wrapper.light-mode.weather-deteriorating .climate-overlay {
+  background: radial-gradient(circle at 50% 50%, transparent 10%, rgba(241, 196, 15, 0.1) 50%, rgba(100, 116, 139, 0.3) 100%);
+}
+.sim-wrapper.light-mode.weather-cyclone-imminent .climate-overlay {
+  background: radial-gradient(circle at 50% 50%, rgba(231, 76, 60, 0.1) 0%, rgba(71, 85, 105, 0.5) 50%, rgba(15, 23, 42, 0.8) 100%);
+}

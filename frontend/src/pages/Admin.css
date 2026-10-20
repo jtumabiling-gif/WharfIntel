@@ -1,0 +1,581 @@
+/* ==========================================================================
+   WHARFADMIN PROTOCOL - MASTER CYBER-GRID SHEET (100% QUARANTINED)
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --cyber-bg: #030303 !important;
+  --cyber-panel: rgba(10, 10, 10, 0.85); 
+  --cyber-panel-hover: rgba(16, 185, 129, 0.08);
+  --cyber-border: rgba(16, 185, 129, 0.2);
+  --cyber-border-heavy: rgba(16, 185, 129, 0.4);
+  --cyber-green: #10b981;
+  --cyber-glow: rgba(16, 185, 129, 0.3);
+  --cyber-danger: #ef4444;
+  --cyber-danger-glow: rgba(239, 68, 68, 0.25);
+  
+  --font-mono: 'Space Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+
+/* 🔥 THE FIX: Universal Box Sizing to guarantee Chrome respects padding bounds */
+.admin-theme *,
+.admin-theme *::before,
+.admin-theme *::after {
+  box-sizing: border-box;
+}
+
+/* 🔥 THE FIX: Universal Box Sizing to guarantee Chrome respects padding bounds */
+.admin-theme *,
+.admin-theme *::before,
+.admin-theme *::after {
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   🔥 THE MASTER ALIGNMENT FIX (ANTI-GAP)
+   Overrides the Dashboard.css margin that was pushing everything too far right
+   ========================================================================== */
+.admin-theme .map-view {
+  margin-left: 0 !important; /* Kills the massive gap */
+  width: auto !important;
+  flex: 1;
+  height: 100vh !important;
+  max-height: 100vh !important; /* Double lock for Chrome */
+  overflow: hidden !important;
+  background: transparent;
+}
+
+/* Ensures the weather pill respects local wrapper positioning */
+.admin-theme .weather-hud-pill {
+  position: relative !important;
+  bottom: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* 1. Cyber-Grid Dynamic Matrix Background */
+.admin-theme.dashboard-wrapper.dark-mode {
+  background-color: var(--cyber-bg) !important;
+  font-family: var(--font-sans);
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden; /* 🔥 Locks the screen to prevent scrolling */
+}
+
+/* 🔥 NEW: The Cyber-Grid is now an overlay that sits ON TOP of the map! */
+.admin-radar-overlay {
+  position: absolute;
+  top: 0; 
+  left: 0; 
+  width: 100vw; 
+  height: 100vh;
+  pointer-events: none; /* Let's you click through the grid to drag the map */
+  z-index: 10;
+  background-image: 
+    linear-gradient(rgba(16, 185, 129, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
+  background-position: center;
+}
+
+/* 🔥 NEW: The Fullscreen Map Container */
+.admin-map-fullscreen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1; /* Sits at the very bottom */
+}
+.admin-map-fullscreen .leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: var(--cyber-bg);
+}
+
+/* 🔥 NEW: Floating Left Column (For Provisioning & Terminal) */
+.admin-floating-left {
+  position: absolute;
+  top: 25px;
+  left: 25px;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  z-index: 1000;
+  max-height: calc(100vh - 50px);
+  overflow-y: auto; /* Allows scrolling if terminal gets too long */
+}
+.admin-floating-left::-webkit-scrollbar { width: 0px; } /* Hides scrollbar */
+
+/* 🔥 UPDATE: Make sure the Ops Panel (Right side) floats perfectly */
+.admin-theme .admin-ops-panel {
+  position: absolute;
+  top: 25px;
+  right: 25px;
+  width: 350px;
+  background: var(--cyber-panel);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--cyber-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 1000;
+  padding: 16px;
+  max-height: calc(100vh - 50px);
+  overflow-y: auto;
+}
+
+/* ==========================================================================
+   Tactical Sidebar Overhaul
+   ========================================================================== */
+/* Make it float with curved edges */
+.admin-theme .sidebar {
+  background: var(--cyber-panel) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--cyber-border-heavy) !important; 
+  border-radius: 20px !important; 
+  height: calc(100vh - 32px) !important; 
+  margin: 16px; /* 🔥 Added margin here so ONLY the sidebar floats */
+  position: relative;
+  box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+  z-index: 1000;
+}
+
+.admin-theme .brand-text h2 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #ffffff !important;
+}
+
+.admin-theme .brand-text p {
+  font-family: var(--font-mono);
+  color: var(--cyber-green) !important;
+  opacity: 0.8;
+  text-shadow: 0 0 8px var(--cyber-glow);
+}
+
+/* 🔥 THE SNEAKY LEAK IS FIXED HERE */
+.admin-theme .side-nav button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8 !important;
+  border-radius: 6px;
+  margin: 4px 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-theme .side-nav button:hover {
+  background: var(--cyber-panel-hover) !important;
+  border-color: var(--cyber-border);
+  color: #ffffff !important;
+  transform: translateX(3px);
+}
+
+.admin-theme .side-nav button.active {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid var(--cyber-green) !important;
+  color: var(--cyber-green) !important;
+  text-shadow: 0 0 10px var(--cyber-glow);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.08), inset 0 0 8px rgba(16, 185, 129, 0.05);
+}
+
+.admin-theme .logout-btn {
+  padding: 12px;
+  width: calc(100% - 24px);
+  margin: 0 12px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--cyber-danger) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  background: rgba(239, 68, 68, 0.02) !important;
+  transition: all 0.2s;
+}
+
+.admin-theme .logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: var(--cyber-danger) !important;
+  box-shadow: 0 0 15px var(--cyber-danger-glow);
+}
+
+/* ==========================================================================
+   Bento Box Modular Layout Components
+   ========================================================================== */
+.admin-theme .bento-grid-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr; /* 🔥 Left card gets 50% space, right two get 25% each */
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.admin-theme .bento-card {
+  background: var(--cyber-panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--cyber-border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.admin-theme .bento-card:hover {
+  border-color: var(--cyber-border-heavy);
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.05);
+}
+
+.admin-theme .bento-card .stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 1px;
+  font-family: var(--font-mono);
+}
+
+.admin-theme .bento-card .stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+}
+
+.admin-theme .bento-main-table-card {
+  background: var(--cyber-panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--cyber-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+/* Modern Minimalist Cyber Table Rows */
+.admin-theme .admin-custom-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-theme .admin-custom-table th {
+  background: rgba(11, 19, 38, 0.6);
+  padding: 18px 24px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--cyber-green);
+  letter-spacing: 1px;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--cyber-border);
+}
+
+.admin-theme .admin-custom-table td {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.08);
+  font-size: 14px;
+  color: #e8eaf0;
+}
+
+.admin-theme .admin-custom-table tr:hover td {
+  background: rgba(16, 185, 129, 0.02);
+}
+
+/* Action Buttons Custom Glows */
+.admin-theme .btn-edit-glow {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--cyber-green);
+  color: var(--cyber-green);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.admin-theme .btn-edit-glow:hover {
+  background: var(--cyber-green);
+  color: #000000;
+  box-shadow: 0 0 12px var(--cyber-glow);
+}
+
+.admin-theme .btn-purge-glow {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--cyber-danger);
+  color: var(--cyber-danger);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.admin-theme .btn-purge-glow:hover {
+  background: var(--cyber-danger);
+  color: #ffffff;
+  box-shadow: 0 0 12px var(--cyber-danger-glow);
+}
+
+/* 🔥 Admin Modal Overrides */
+.admin-theme .admin-modal-card {
+  background: var(--cyber-panel) !important;
+  border: 1px solid var(--cyber-border) !important;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 20px rgba(16, 185, 129, 0.05) !important;
+}
+
+.admin-theme .admin-provision-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.admin-theme .admin-invite-button {
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid rgba(56, 189, 248, .45);
+  border-radius: 8px;
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, .1);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background .18s ease, border-color .18s ease;
+}
+
+.admin-theme .admin-invite-button:hover {
+  border-color: #38bdf8;
+  background: rgba(14, 165, 233, .18);
+}
+
+.admin-theme .admin-invite-card {
+  gap: 0;
+  min-height: auto;
+  padding: 28px;
+  overflow: auto;
+}
+
+.admin-theme .admin-invite-eyebrow {
+  margin: 0 0 8px;
+  color: #38bdf8;
+  font: 9px 'Space Mono', Consolas, monospace;
+  letter-spacing: 1px;
+}
+
+.admin-theme .admin-invite-card h2 {
+  margin: 0 0 8px;
+  color: #e2e8f0;
+  font-size: 20px;
+}
+
+.admin-theme .admin-invite-description,
+.admin-theme .admin-invite-result > p {
+  margin: 0 0 18px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.admin-theme .admin-invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.admin-theme .admin-invite-form label,
+.admin-theme .admin-invite-result label {
+  color: #bac8d7;
+  font-size: 10px;
+}
+
+.admin-theme .admin-invite-card input {
+  margin: 0 0 8px;
+}
+
+.admin-theme .admin-invite-card input[readonly] {
+  color: #94a3b8 !important;
+}
+
+.admin-theme .admin-invite-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.admin-theme .admin-invite-actions button {
+  min-height: 37px;
+  padding: 0 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.admin-theme .admin-invite-cancel {
+  border: 1px solid var(--cyber-border-heavy);
+  color: #94a3b8;
+  background: transparent;
+}
+
+.admin-theme .admin-invite-submit {
+  border: 1px solid #38bdf8;
+  color: #082f49;
+  background: #38bdf8;
+}
+
+.admin-theme .admin-invite-submit:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.admin-theme .admin-invite-error { margin: 2px 0; color: #fda4af; font-size: 11px; }
+.admin-theme .admin-invite-copy-note { margin: 0 0 12px !important; color: #67e8f9 !important; font-size: 10px !important; }
+
+@media (max-width: 560px) {
+  .admin-theme .admin-provision-actions { align-items: stretch; flex-direction: column; }
+  .admin-theme .admin-invite-button { width: 100%; }
+}
+
+/* 🔥 Admin Modal Overrides (Fixed Number Fields) */
+.admin-theme .admin-modal-card input {
+  background: rgba(0,0,0,0.5) !important;
+  border: 1px solid var(--cyber-border-heavy) !important;
+  color: #fff !important;
+  font-family: var(--font-mono) !important;
+  
+  /* Forces all inputs (text, password, number) to look identical */
+  width: 100%;
+  padding: 14px 16px !important;
+  border-radius: 10px !important;
+  box-sizing: border-box;
+  outline: none;
+  transition: all 0.2s;
+}
+
+/* 🔥 The "Warning" Cursor for un-editable usernames */
+.admin-theme .admin-modal-card input:disabled {
+  cursor: not-allowed !important;
+}
+
+/* Only glow when the user is actually allowed to type */
+.admin-theme .admin-modal-card input:focus:not(:disabled) {
+  border-color: var(--cyber-green) !important;
+  box-shadow: 0 0 10px var(--cyber-glow) !important;
+}
+
+/* Optional: Hides the ugly up/down arrows on the number fields for a cleaner look */
+.admin-theme .admin-modal-card input[type="number"]::-webkit-inner-spin-button,
+.admin-theme .admin-modal-card input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Modals Overlay Isolation */
+.admin-theme .modal-overlay {
+  z-index: 9999; /* Ensures it sits above everything in Admin mode */
+}
+
+/* 🔥 Admin Map View Curved Container */
+.admin-theme .map-view {
+  background: transparent; /* 🔥 Removed borders and background to ground it */
+  flex: 1; /* Takes up the rest of the screen */
+}
+
+/* 🔥 Admin Facility Ops Panel */
+.admin-theme .admin-ops-panel {
+  position: absolute;
+  top: 25px;
+  right: 25px;
+  width: 320px;
+  background: var(--cyber-panel);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--cyber-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 1000;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.admin-theme .admin-ops-panel.minimized {
+  width: auto;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.admin-theme .admin-ops-panel.minimized:hover {
+  border-color: var(--cyber-green);
+}
+
+/* 🔥 Recharts Graph Container */
+.admin-theme .admin-graph-card {
+  background: var(--cyber-panel);
+  border: 1px solid var(--cyber-border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 24px;
+  height: 250px;
+}
+
+/* 🔥 ADMIN MAP POPUP OVERRIDE (Matches Facility Ops) */
+.admin-theme .leaflet-popup-content-wrapper {
+  background: var(--cyber-panel) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--cyber-border) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+  border-radius: 12px !important;
+}
+
+/* 🔥 The little arrow pointing down to the dot */
+.admin-theme .leaflet-popup-tip {
+  background: var(--cyber-panel) !important;
+  border: 1px solid var(--cyber-border) !important;
+}
+
+/* Optional: Make the close 'X' button match the admin theme */
+.admin-theme .leaflet-popup-close-button {
+  color: var(--text-muted) !important;
+}
+.admin-theme .leaflet-popup-close-button:hover {
+  color: var(--cyber-danger) !important;
+}
+
+/* ==========================================================================
+   ADMIN SPECIFIC OVERRIDES (CHROME FIXES & WEATHER HUD)
+   ========================================================================== */
+
+/* 🔥 Strips the absolute positioning so the Pill stacks cleanly under the header */
+.admin-theme .weather-hud-pill {
+  position: relative !important;
+  bottom: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* 🔥 Forces Chrome to obey the height limits and scroll the table instead of the page */
+.admin-theme .bento-main-table-card {
+  display: flex;
+  flex-direction: column;
+}
+.admin-theme .bento-main-table-card table {
+  flex: 1;
+}
+.admin-theme .bento-main-table-card tbody {
+  display: block;
+  overflow-y: auto;
+  max-height: calc(100vh - 400px); /* Strictly prevents Chrome overflow */
+}
+.admin-theme .admin-custom-table thead, 
+.admin-theme .admin-custom-table tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
