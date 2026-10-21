@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadLearnerProgress, LEARNER_PROGRESS_PREFIX } from './lmsStore';
-import { loadQuizAttempts, saveQuizAttempts, scoreAssessment } from './quizStore';
+import { isAwaitingInstructorReview, loadQuizAttempts, saveQuizAttempts, scoreAssessment } from './quizStore';
 import './InstructorManagementViews.css';
 
 const MANUAL_QUESTION_TYPES = ['identification', 'short-answer', 'essay'];
@@ -135,12 +135,13 @@ export const SubmissionChecking = ({ modules, quizzes, onNotice }) => {
   })();
   const quizById = useMemo(() => new Map(quizzes.map((quiz) => [quiz.id, quiz])), [quizzes]);
   const moduleById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules]);
-  const pending = snapshot.attempts.filter((attempt) => attempt.status === 'Pending Review' && quizById.has(attempt.quizId));
+  const awaitingReview = snapshot.attempts.filter(isAwaitingInstructorReview);
+  const pending = awaitingReview.filter((attempt) => quizById.has(attempt.quizId));
   const finalizeGrade = (submission, quiz, manualGrades) => {
     const current = loadQuizAttempts();
     const currentStudentAttempts = current[submission.studentName] || [];
     const currentAttempt = currentStudentAttempts.find((attempt) => attempt.id === submission.id);
-    if (!currentAttempt || currentAttempt.status !== 'Pending Review') {
+    if (!currentAttempt || !isAwaitingInstructorReview(currentAttempt)) {
       throw new Error('This submission is no longer awaiting review. Refresh the list and try again.');
     }
     const auto = scoreAssessment(quiz, currentAttempt.answers || {});
@@ -222,7 +223,13 @@ export const SubmissionChecking = ({ modules, quizzes, onNotice }) => {
               })}
             </tbody>
           </table>
-          {pending.length === 0 && !snapshot.error && <p className="instructor-empty">There are no quiz or exam submissions awaiting manual review.</p>}
+          {pending.length === 0 && !snapshot.error && (
+            <p className="instructor-empty">
+              {awaitingReview.length
+                ? `${awaitingReview.length} submission${awaitingReview.length === 1 ? '' : 's'} need grading, but the matching assessment could not be found. Check that this browser has the same published quizzes as the learner browser.`
+                : 'There are no quiz or exam submissions awaiting manual review. Assessment submissions are stored in this browser, so learners and instructors need to use the same browser profile to share them.'}
+            </p>
+          )}
         </div>
       </section>
       {selected && <GradingWorkspace submission={selected.attempt} quiz={selected.quiz} onClose={() => setSelected(null)} onFinalize={finalizeGrade} />}

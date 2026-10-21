@@ -39,6 +39,10 @@ export const saveQuizAttempts = (attempts) => {
   localStorage.setItem(QUIZ_ATTEMPTS_STORAGE_KEY, JSON.stringify(attempts));
 };
 
+export const isAwaitingInstructorReview = (attempt) => (
+  attempt?.status === 'Pending Review' || (attempt?.status === 'Submitted' && !attempt.gradedAt)
+);
+
 export const createAssessmentId = () => (
   globalThis.crypto?.randomUUID?.() || `quiz-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 );

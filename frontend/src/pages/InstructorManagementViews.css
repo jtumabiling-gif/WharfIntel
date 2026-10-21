@@ -24,6 +24,7 @@
 
 .instructor-main-tabs button:hover { color: var(--instructor-text); background: rgba(255,255,255,.035); }
 .instructor-main-tabs button.selected { color: #7dd3fc; border-color: rgba(56,189,248,.2); background: rgba(56,189,248,.09); }
+.instructor-tab-count { display: inline-grid; min-width: 18px; height: 18px; place-items: center; margin-left: 7px; padding: 0 5px; border-radius: 9px; color: #082f49; background: #67e8f9; font: 9px 'Space Mono', Consolas, monospace; }
 .instructor-management-panel { margin-top: 0; }
 .management-table { min-width: 1030px; }
 .submission-table { min-width: 900px; }

@@ -8,7 +8,7 @@ import {
   saveLmsAttachment,
   saveInstructorModules,
 } from './lmsStore';
-import { loadQuizzes, QUIZZES_STORAGE_KEY } from './quizStore';
+import { isAwaitingInstructorReview, loadQuizAttempts, loadQuizzes, QUIZZES_STORAGE_KEY } from './quizStore';
 import { StudentManagement, SubmissionChecking } from './InstructorManagementViews';
 import './InstructorLMSPage.css';
 
@@ -18,6 +18,16 @@ const MotionArticle = motion.article;
 
 const CATEGORIES = ['Port Safety', 'Logistics', 'Emergency Response', 'Vessel Operations'];
 const MODULE_FILTERS = ['All Modules', 'Active', 'Drafts'];
+
+const countPendingQuizReviews = () => {
+  try {
+    return Object.values(loadQuizAttempts()).reduce((total, attempts) => (
+      total + (Array.isArray(attempts) ? attempts.filter(isAwaitingInstructorReview).length : 0)
+    ), 0);
+  } catch {
+    return 0;
+  }
+};
 
 const createSection = (title = '') => ({
   id: globalThis.crypto?.randomUUID?.() || `section-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -240,7 +250,10 @@ const InstructorLMSPage = () => {
   const [, setRefreshTick] = useState(0);
   const [notice, setNotice] = useState('');
   const [quizzes, setQuizzes] = useState([]);
-  const [activeTab, setActiveTab] = useState('courses');
+  const [activeTab, setActiveTab] = useState(() => (
+    countPendingQuizReviews() ? 'submissions' : 'courses'
+  ));
+  const pendingQuizReviews = countPendingQuizReviews();
 
   useEffect(() => {
     const refreshQuizzes = (event) => {
@@ -411,7 +424,9 @@ const InstructorLMSPage = () => {
 
         <nav className="instructor-main-tabs" aria-label="Instructor dashboard sections">
           <button type="button" className={activeTab === 'courses' ? 'selected' : ''} onClick={() => setActiveTab('courses')} aria-current={activeTab === 'courses' ? 'page' : undefined}>Course Management</button>
-          <button type="button" className={activeTab === 'submissions' ? 'selected' : ''} onClick={() => setActiveTab('submissions')} aria-current={activeTab === 'submissions' ? 'page' : undefined}>Submission Checking</button>
+          <button type="button" className={activeTab === 'submissions' ? 'selected' : ''} onClick={() => setActiveTab('submissions')} aria-current={activeTab === 'submissions' ? 'page' : undefined}>
+            Submission Checking{pendingQuizReviews > 0 && <span className="instructor-tab-count">{pendingQuizReviews}</span>}
+          </button>
           <button type="button" className={activeTab === 'students' ? 'selected' : ''} onClick={() => setActiveTab('students')} aria-current={activeTab === 'students' ? 'page' : undefined}>Student Management</button>
         </nav>
 
