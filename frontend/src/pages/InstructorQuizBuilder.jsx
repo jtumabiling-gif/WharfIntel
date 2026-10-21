@@ -177,7 +177,7 @@ const InstructorQuizBuilder = () => {
                 <fieldset className="quiz-question-card" key={question.id}>
                   <legend>QUESTION {String(index + 1).padStart(2, '0')}</legend>
                   <div className="quiz-question-controls">
-                    <label className="quiz-field"><span>Question type</span><select value={question.type} onChange={(event) => updateQuestionType(question.id, event.target.value)}><option value="multiple-choice">Multiple choice</option><option value="true-false">True / False</option><option value="identification">Identification</option></select></label>
+                    <label className="quiz-field"><span>Question type</span><select value={question.type} onChange={(event) => updateQuestionType(question.id, event.target.value)}><option value="multiple-choice">Multiple choice</option><option value="true-false">True / False</option><option value="identification">Identification</option><option value="short-answer">Short answer</option><option value="essay">Essay</option></select></label>
                     <label className="quiz-field quiz-points-field"><span>Points</span><input type="number" min="1" max="100" value={question.points} onChange={(event) => updateQuestion(question.id, { points: event.target.value })} required /></label>
                   </div>
                   <label className="quiz-field"><span>Question prompt <i>*</i></span><textarea value={question.prompt} onChange={(event) => updateQuestion(question.id, { prompt: event.target.value })} rows={2} maxLength={1000} required placeholder="Write a clear question for learners" /></label>
@@ -204,7 +204,12 @@ const InstructorQuizBuilder = () => {
                     </div>
                   )}
                   {question.type === 'true-false' && <label className="quiz-field"><span>Correct answer</span><select value={question.answer} onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}><option value="True">True</option><option value="False">False</option></select></label>}
-                  {question.type === 'identification' && <label className="quiz-field"><span>Correct answer <i>*</i></span><input value={question.answer} onChange={(event) => updateQuestion(question.id, { answer: event.target.value })} maxLength={300} required placeholder="Enter the expected answer" /></label>}
+                  {['identification', 'short-answer', 'essay'].includes(question.type) && (
+                    <label className="quiz-field">
+                      <span>{question.type === 'essay' ? 'Grading rubric / reference key' : 'Expected answer / reference key'} <i>*</i></span>
+                      <textarea value={question.answer} onChange={(event) => updateQuestion(question.id, { answer: event.target.value })} maxLength={1000} rows={question.type === 'essay' ? 3 : 2} required placeholder={question.type === 'essay' ? 'Describe the criteria for awarding points.' : 'Enter the expected answer or grading guide.'} />
+                    </label>
+                  )}
                 </fieldset>
               ))}
             </div>

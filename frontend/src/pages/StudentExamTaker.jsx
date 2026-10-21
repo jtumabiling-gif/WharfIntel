@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { LEARNER_PROGRESS_PREFIX } from './lmsStore';
 import {
   isAssessmentAvailable,
   loadQuizAttempts,
   loadQuizzes,
+  QUIZ_ATTEMPTS_STORAGE_KEY,
   saveQuizAttempts,
   scoreAssessment,
 } from './quizStore';
@@ -93,15 +95,35 @@ const StudentExamTaker = () => {
       const completedAttempt = {
         ...currentAttempt,
         answers: answersRef.current,
-        status: 'Submitted',
+        status: 'Pending Review',
         submittedAt: new Date().toISOString(),
         expired,
         ...result,
+        percentage: null,
+        passed: null,
       };
       const storedAttempts = loadQuizAttempts();
       const learnerAttempts = storedAttempts[username] || [];
       const updatedAttempts = learnerAttempts.map((item) => item.id === completedAttempt.id ? completedAttempt : item);
       saveQuizAttempts({ ...storedAttempts, [username]: updatedAttempts });
+      if (quiz.courseId) {
+        try {
+          const progressKey = `${LEARNER_PROGRESS_PREFIX}${username}`;
+          const savedProgress = JSON.parse(localStorage.getItem(progressKey) || '{}');
+          const courseScores = { ...(savedProgress.__assessmentScores?.[quiz.courseId] || {}) };
+          delete courseScores[quiz.id];
+          localStorage.setItem(progressKey, JSON.stringify({
+            ...savedProgress,
+            __assessmentScores: {
+              ...(savedProgress.__assessmentScores || {}),
+              [quiz.courseId]: courseScores,
+            },
+            __lastActivity: completedAttempt.submittedAt,
+          }));
+        } catch (progressError) {
+          setSubmissionError(`Your submission was received, but course progress could not be updated: ${progressError.message || 'browser storage is unavailable'}.`);
+        }
+      }
       attemptRef.current = completedAttempt;
       setAttempt(completedAttempt);
       setShowConfirmation(false);
@@ -111,6 +133,36 @@ const StudentExamTaker = () => {
   };
 
   useEffect(() => { finalizeRef.current = finalizeAttempt; });
+
+  useEffect(() => {
+    const refreshGradedAttempt = (event) => {
+      if (event?.key && event.key !== QUIZ_ATTEMPTS_STORAGE_KEY) return;
+      try {
+        const currentAttempt = attemptRef.current;
+        if (!currentAttempt) return;
+        const latest = (loadQuizAttempts()[username] || []).find((item) => item.id === currentAttempt.id);
+        if (latest && (
+          latest.status !== currentAttempt.status
+          || latest.percentage !== currentAttempt.percentage
+          || latest.passed !== currentAttempt.passed
+          || latest.gradedAt !== currentAttempt.gradedAt
+        )) {
+          attemptRef.current = latest;
+          setAttempt(latest);
+        }
+      } catch (loadError) {
+        setSubmissionError(loadError.message || 'Could not refresh your released grade.');
+      }
+    };
+    window.addEventListener('storage', refreshGradedAttempt);
+    window.addEventListener('focus', refreshGradedAttempt);
+    document.addEventListener('visibilitychange', refreshGradedAttempt);
+    return () => {
+      window.removeEventListener('storage', refreshGradedAttempt);
+      window.removeEventListener('focus', refreshGradedAttempt);
+      document.removeEventListener('visibilitychange', refreshGradedAttempt);
+    };
+  }, [username]);
 
   useEffect(() => {
     if (attempt?.status !== 'In Progress') return undefined;
@@ -156,19 +208,48 @@ const StudentExamTaker = () => {
   }
   if (!quiz) return <main className="student-exam-page"><p className="exam-loading">Loading assessment…</p></main>;
 
-  if (attempt?.status === 'Submitted') {
+  if (attempt?.status === 'Pending Review' || attempt?.status === 'Submitted') {
+    return (
+      <main className="student-exam-page exam-result-page">
+        <section className="quiz-result-card">
+          <p className="quiz-eyebrow">ASSESSMENT RECEIVED</p>
+          <span className="exam-result-mark failed">REVIEW</span>
+          <h1>Submitted / Pending Review</h1>
+          <p className="exam-result-description">Your submission has been received and is waiting for instructor evaluation.</p>
+          {submissionError && <p className="exam-result-description" role="alert">{submissionError}</p>}
+          <p className="exam-attempt-count">Your final score will be available after your instructor releases the grade.</p>
+          <button type="button" className="quiz-button secondary" onClick={() => navigate('/lms')}>Return to learning center</button>
+        </section>
+      </main>
+    );
+  }
+
+  if (attempt?.status === 'Graded') {
+    const passed = attempt.passed === true;
     return (
       <main className="student-exam-page exam-result-page">
         <section className="quiz-result-card">
           <p className="quiz-eyebrow">ASSESSMENT COMPLETE</p>
-          <span className={`exam-result-mark ${attempt.passed ? 'passed' : 'failed'}`}>{attempt.passed ? 'PASS' : 'REVIEW'}</span>
-          <h1>{attempt.passed ? 'Assessment passed' : 'Assessment not passed'}</h1>
-          <p className="exam-result-description">{attempt.expired ? 'Time expired and your responses were submitted.' : 'Your responses have been submitted and scored.'}</p>
+          <span className={`exam-result-mark ${passed ? 'passed' : 'failed'}`}>{passed ? 'PASS' : 'FAIL'}</span>
+          <h1>{passed ? 'Assessment passed' : 'Assessment failed'}</h1>
+          <p className="exam-result-description">Your instructor has released your final score.</p>
+          {submissionError && <p className="exam-result-description" role="alert">{submissionError}</p>}
           <div className="exam-score-grid">
             <div><span>Score</span><strong>{attempt.percentage}%</strong></div>
             <div><span>Points</span><strong>{attempt.earnedPoints} / {attempt.possiblePoints}</strong></div>
             <div><span>Passing score</span><strong>{quiz.passingScore}%</strong></div>
           </div>
+          {attempt.status === 'Graded' && quiz.questions.some((question) => attempt.manualGrades?.[question.id]?.feedback?.trim()) && (
+            <section className="exam-released-feedback" aria-label="Instructor feedback">
+              <h2>Instructor feedback</h2>
+              {quiz.questions.filter((question) => attempt.manualGrades?.[question.id]?.feedback?.trim()).map((question) => (
+                <article key={question.id}>
+                  <strong>{question.prompt}</strong>
+                  <p>{attempt.manualGrades[question.id].feedback}</p>
+                </article>
+              ))}
+            </section>
+          )}
           <p className="exam-attempt-count">Attempt {attempt.attemptNumber || 1} of {quiz.maxAttempts}</p>
           <button type="button" className="quiz-button secondary" onClick={() => navigate('/lms')}>Return to learning center</button>
         </section>
@@ -209,7 +290,8 @@ const StudentExamTaker = () => {
           <h2 id="exam-question-heading">{currentQuestion.prompt}</h2>
           {currentQuestion.type === 'multiple-choice' && <div className="exam-answer-list">{currentQuestion.options.map((option, index) => <label className={`exam-choice ${answers[currentQuestion.id] === option ? 'selected' : ''}`} key={`${currentQuestion.id}-${index}`}><input type="radio" name={currentQuestion.id} value={option} checked={answers[currentQuestion.id] === option} onChange={() => updateAnswer(currentQuestion.id, option)} /><span>{option}</span></label>)}</div>}
           {currentQuestion.type === 'true-false' && <div className="exam-answer-list">{['True', 'False'].map((option) => <label className={`exam-choice ${answers[currentQuestion.id] === option ? 'selected' : ''}`} key={option}><input type="radio" name={currentQuestion.id} value={option} checked={answers[currentQuestion.id] === option} onChange={() => updateAnswer(currentQuestion.id, option)} /><span>{option}</span></label>)}</div>}
-          {currentQuestion.type === 'identification' && <label className="exam-identification"><span>Your answer</span><input value={answers[currentQuestion.id] || ''} onChange={(event) => updateAnswer(currentQuestion.id, event.target.value)} autoComplete="off" /></label>}
+          {['identification', 'short-answer'].includes(currentQuestion.type) && <label className="exam-identification"><span>Your answer</span><input value={answers[currentQuestion.id] || ''} onChange={(event) => updateAnswer(currentQuestion.id, event.target.value)} autoComplete="off" /></label>}
+          {currentQuestion.type === 'essay' && <label className="exam-identification"><span>Your answer</span><textarea value={answers[currentQuestion.id] || ''} onChange={(event) => updateAnswer(currentQuestion.id, event.target.value)} rows={8} maxLength={10000} /></label>}
           <footer className="exam-question-footer">
             <button type="button" className="quiz-button secondary" onClick={() => setActiveQuestion((index) => Math.max(0, index - 1))} disabled={activeQuestion === 0}>← Previous</button>
             <button type="button" className="quiz-button secondary" onClick={() => setActiveQuestion((index) => Math.min(quiz.questions.length - 1, index + 1))} disabled={activeQuestion === quiz.questions.length - 1}>Next →</button>

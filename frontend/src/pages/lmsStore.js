@@ -1,3 +1,5 @@
+import { loadQuizAttempts, loadQuizzes } from './quizStore';
+
 export const MODULES_STORAGE_KEY = 'wharfintel:lms-instructor-modules:v1';
 export const LEARNER_PROGRESS_PREFIX = 'wharfintel:lms-progress:';
 const LMS_FILES_DB = 'wharfintel-lms-files';
@@ -251,6 +253,8 @@ export const saveInstructorModules = (modules) => {
 
 export const loadLearnerProgress = (modules) => {
   const moduleById = new Map(modules.map((module) => [module.id, module]));
+  const quizById = new Map(loadQuizzes().map((quiz) => [quiz.id, quiz]));
+  const quizAttempts = loadQuizAttempts();
   const today = new Date().toISOString().slice(0, 10);
   const learners = [];
 
@@ -269,20 +273,35 @@ export const loadLearnerProgress = (modules) => {
 
       if (['admin', 'instructor'].includes(String(savedProgress.__role || '').toLowerCase())) continue;
 
-      Object.entries(savedProgress).forEach(([courseId, lessonProgress]) => {
+      const activityCourseIds = Object.keys(savedProgress).filter((courseId) => !courseId.startsWith('__'));
+      const assessmentCourseIds = Object.keys(savedProgress.__assessmentScores || {});
+      const courseIds = Array.isArray(savedProgress.__enrolledCourses)
+        ? [...new Set([...savedProgress.__enrolledCourses, ...assessmentCourseIds])]
+        : [...new Set([...activityCourseIds, ...assessmentCourseIds])];
+      courseIds.forEach((courseId) => {
+        const lessonProgress = savedProgress[courseId];
         const sectionProgress = Array.isArray(lessonProgress)
           ? lessonProgress
           : lessonProgress && typeof lessonProgress === 'object'
             ? Object.values(lessonProgress)
             : [];
-        if (sectionProgress.length === 0) return;
 
         const module = moduleById.get(courseId);
         const courseName = module?.title || COURSE_TITLES[courseId];
         if (!courseName) return;
 
         const completed = sectionProgress.filter(Boolean).length;
-        const progress = Math.round((completed / sectionProgress.length) * 100);
+        const lessonPercent = sectionProgress.length ? Math.round((completed / sectionProgress.length) * 100) : 0;
+        const assessmentScores = (quizAttempts[studentName] || [])
+          .filter((attempt) => attempt.status === 'Graded' && quizById.get(attempt.quizId)?.courseId === courseId)
+          .map((attempt) => Number(attempt.percentage))
+          .filter((score) => Number.isFinite(score));
+        const averageAssessmentScore = assessmentScores.length
+          ? assessmentScores.reduce((total, score) => total + score, 0) / assessmentScores.length
+          : null;
+        const progress = averageAssessmentScore === null
+          ? lessonPercent
+          : Math.round((lessonPercent + averageAssessmentScore) / 2);
         const deadline = module?.deadline || '';
         const status = progress === 100
           ? 'Completed'
@@ -295,6 +314,8 @@ export const loadLearnerProgress = (modules) => {
           studentName,
           courseId,
           courseName,
+          lessonPercent,
+          averageAssessmentScore,
           progress,
           lastActivity: savedProgress.__lastActivity || '',
           status,

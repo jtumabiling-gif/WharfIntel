@@ -211,7 +211,10 @@ const loadCourses = (storageKey, instructorModules = []) => {
         };
       });
 
-    return [...catalogCourses, ...additionalCourses].map((course) => ({
+    const enrolledCourseIds = Array.isArray(saved.__enrolledCourses) ? new Set(saved.__enrolledCourses) : null;
+    return [...catalogCourses, ...additionalCourses]
+      .filter((course) => !enrolledCourseIds || enrolledCourseIds.has(course.id))
+      .map((course) => ({
       ...course,
       lessons: course.lessons.map((lesson, index) => ({
         ...lesson,
@@ -299,7 +302,7 @@ const LMSPage = () => {
 
   useEffect(() => {
     const syncModules = (event) => {
-      if (event?.key && event.key !== MODULES_STORAGE_KEY) return;
+      if (event?.key && ![MODULES_STORAGE_KEY, storageKey].includes(event.key)) return;
       const nextModules = loadInstructorModules();
       setInstructorModules(nextModules);
       setCourses(loadCourses(storageKey, nextModules));
@@ -321,8 +324,44 @@ const LMSPage = () => {
     (total, course) => total + getCourseProgress(course).completed,
     0,
   );
+  const hasPendingReview = (courseId) => quizzes.some((quiz) => {
+    if (quiz.courseId !== courseId) return false;
+    const attempts = (quizAttempts[username] || []).filter((attempt) => attempt.quizId === quiz.id);
+    return attempts[attempts.length - 1]?.status === 'Pending Review';
+  });
+  const getDisplayedCourseProgress = (course) => {
+    const progress = getCourseProgress(course);
+    const releasedScores = quizzes.filter((quiz) => quiz.courseId === course.id).map((quiz) => {
+      const latest = [...(quizAttempts[username] || [])].reverse().find((attempt) => attempt.quizId === quiz.id);
+      return latest?.status === 'Graded' && Number.isFinite(Number(latest.percentage))
+        ? Number(latest.percentage)
+        : null;
+    }).filter((score) => score !== null);
+    const averageAssessment = releasedScores.length
+      ? releasedScores.reduce((total, score) => total + score, 0) / releasedScores.length
+      : null;
+    const combinedPercent = averageAssessment === null
+      ? progress.percent
+      : Math.round((progress.percent + averageAssessment) / 2);
+    return {
+      ...progress,
+      percent: hasPendingReview(course.id) && combinedPercent === 100 ? 99 : combinedPercent,
+    };
+  };
+  const getDisplayedCourseStatus = (course) => {
+    const progress = getDisplayedCourseProgress(course);
+    if (progress.percent === 100) return 'Completed';
+    if (progress.percent === 0 && !hasPendingReview(course.id)) return getCourseStatus(course);
+    return 'In progress';
+  };
+  const readinessPercent = (() => {
+    const lessonCount = courses.reduce((total, course) => total + course.lessons.length, 0);
+    if (!lessonCount) return 0;
+    const percent = Math.round((completedLessons / lessonCount) * 100);
+    return percent === 100 && courses.some((course) => hasPendingReview(course.id)) ? 99 : percent;
+  })();
   const filteredCourses = courses.filter((course) => {
-    const matchesFilter = filter === 'All courses' || getCourseStatus(course) === filter;
+    const matchesFilter = filter === 'All courses' || getDisplayedCourseStatus(course) === filter;
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || `${course.title} ${course.category} ${course.description}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
@@ -381,7 +420,8 @@ const LMSPage = () => {
     const attempts = (quizAttempts[username] || []).filter((attempt) => attempt.quizId === quiz.id);
     const latest = attempts[attempts.length - 1];
     if (latest?.status === 'In Progress') return 'Pending';
-    if (latest?.status === 'Submitted') return latest.passed ? 'Passed' : 'Failed';
+    if (latest?.status === 'Pending Review' || latest?.status === 'Submitted') return 'Needs review';
+    if (latest?.status === 'Graded') return latest.passed === true ? 'Passed' : 'Failed';
     return 'Not Attempted';
   };
 
@@ -422,8 +462,8 @@ const LMSPage = () => {
           </div>
           <div className="lms-readiness">
             <span className="lms-readiness-label">FLEET READINESS</span>
-            <strong>{Math.round((completedLessons / courses.reduce((total, course) => total + course.lessons.length, 0)) * 100)}%</strong>
-            <span className="lms-readiness-track"><span style={{ width: `${Math.round((completedLessons / courses.reduce((total, course) => total + course.lessons.length, 0)) * 100)}%` }} /></span>
+            <strong>{readinessPercent}%</strong>
+            <span className="lms-readiness-track"><span style={{ width: `${readinessPercent}%` }} /></span>
           </div>
         </MotionSection>
 
@@ -469,8 +509,8 @@ const LMSPage = () => {
 
           <div className="lms-course-grid">
             {filteredCourses.map((course) => {
-                const progress = getCourseProgress(course);
-                const status = getCourseStatus(course);
+                const progress = getDisplayedCourseProgress(course);
+                const status = getDisplayedCourseStatus(course);
                 const action = status === 'Completed' ? 'Review course' : status === 'Not started' ? 'Start course' : 'Continue course';
 
                 return (
@@ -527,8 +567,8 @@ const LMSPage = () => {
                   <button className="lms-modal-close" type="button" onClick={() => setSelectedCourseId(null)} aria-label="Close course outline">×</button>
                 </header>
                 <div className="lms-modal-progress">
-                  <span>{getCourseProgress(selectedCourse).completed} of {selectedCourse.lessons.length} modules complete</span>
-                  <strong>{getCourseProgress(selectedCourse).percent}%</strong>
+                  <span>{getDisplayedCourseProgress(selectedCourse).completed} of {selectedCourse.lessons.length} modules complete</span>
+                  <strong>{getDisplayedCourseProgress(selectedCourse).percent}%</strong>
                 </div>
                 <div className="lms-lesson-list">
                   {selectedCourse.lessons.map((lesson, index) => {
@@ -580,11 +620,15 @@ const LMSPage = () => {
                       const status = getAssessmentStatus(quiz);
                       const available = isAssessmentAvailable(quiz);
                       const inProgress = status === 'Pending';
+                      const latestAttempt = [...(quizAttempts[username] || [])].reverse().find((attempt) => attempt.quizId === quiz.id);
+                      const canViewResult = ['Pending Review', 'Submitted', 'Graded'].includes(latestAttempt?.status);
+                      const canTake = canTakeAssessment(quiz);
                       return (
                         <article className="lms-assessment-row" key={quiz.id}>
                           <div><strong>{quiz.title}</strong><span>{quiz.questions?.length || 0} questions · {quiz.timeLimit} min · {quiz.maxAttempts} attempt{Number(quiz.maxAttempts) === 1 ? '' : 's'}</span></div>
                           <span className={`lms-assessment-status status-${status.toLowerCase().replace(' ', '-')}`}>{status}</span>
-                          <button type="button" disabled={!canTakeAssessment(quiz)} onClick={() => openExam(quiz)}>{inProgress ? 'Resume exam' : 'Take exam'} <span aria-hidden="true">↗</span></button>
+                          <button type="button" disabled={!canTake && !canViewResult} onClick={() => openExam(quiz)}>{canTake ? inProgress ? 'Resume exam' : 'Take exam' : canViewResult ? 'View result' : 'Take exam'} <span aria-hidden="true">↗</span></button>
+                          {canTake && canViewResult && <button type="button" onClick={() => openExam(quiz)}>View result <span aria-hidden="true">↗</span></button>}
                           {!available && <small className="lms-assessment-availability">{quiz.availableFrom && !isAssessmentAvailable({ availableFrom: quiz.availableFrom }) ? 'Not available yet' : 'Availability ended'}</small>}
                         </article>
                       );

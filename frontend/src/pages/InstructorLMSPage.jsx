@@ -9,6 +9,7 @@ import {
   saveInstructorModules,
 } from './lmsStore';
 import { loadQuizzes, QUIZZES_STORAGE_KEY } from './quizStore';
+import { StudentManagement, SubmissionChecking } from './InstructorManagementViews';
 import './InstructorLMSPage.css';
 
 const MotionDiv = motion.div;
@@ -239,6 +240,7 @@ const InstructorLMSPage = () => {
   const [, setRefreshTick] = useState(0);
   const [notice, setNotice] = useState('');
   const [quizzes, setQuizzes] = useState([]);
+  const [activeTab, setActiveTab] = useState('courses');
 
   useEffect(() => {
     const refreshQuizzes = (event) => {
@@ -362,6 +364,11 @@ const InstructorLMSPage = () => {
     navigate('/');
   };
 
+  const showNotice = (message) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 2800);
+  };
+
   if (!authorized) {
     return (
       <div className="instructor-page">
@@ -402,6 +409,16 @@ const InstructorLMSPage = () => {
           <span className="instructor-live-indicator"><i /> LOCAL COURSE DATA</span>
         </MotionSection>
 
+        <nav className="instructor-main-tabs" aria-label="Instructor dashboard sections">
+          <button type="button" className={activeTab === 'courses' ? 'selected' : ''} onClick={() => setActiveTab('courses')} aria-current={activeTab === 'courses' ? 'page' : undefined}>Course Management</button>
+          <button type="button" className={activeTab === 'submissions' ? 'selected' : ''} onClick={() => setActiveTab('submissions')} aria-current={activeTab === 'submissions' ? 'page' : undefined}>Submission Checking</button>
+          <button type="button" className={activeTab === 'students' ? 'selected' : ''} onClick={() => setActiveTab('students')} aria-current={activeTab === 'students' ? 'page' : undefined}>Student Management</button>
+        </nav>
+
+        {activeTab === 'submissions' && <SubmissionChecking modules={modules} quizzes={quizzes} onNotice={showNotice} />}
+        {activeTab === 'students' && <StudentManagement modules={modules} quizzes={quizzes} onNotice={showNotice} />}
+
+        {activeTab === 'courses' && <>
         <section className="instructor-metrics" aria-label="Instructor metrics">
           {metrics.map((metric, index) => (
             <MotionArticle className="instructor-metric-card" key={metric.label} {...entrance} transition={{ delay: reduceMotion ? 0 : index * 0.055, duration: 0.28 }}>
@@ -494,6 +511,7 @@ const InstructorLMSPage = () => {
         </section>
 
         <p className="instructor-data-note">Progress is read from learner activity saved in this browser. Connect an LMS API for shared, multi-device records.</p>
+        </>}
         </div>
       </div>
 
