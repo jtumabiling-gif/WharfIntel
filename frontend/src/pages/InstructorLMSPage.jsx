@@ -389,7 +389,7 @@ const InstructorLMSPage = () => {
           <p className="instructor-eyebrow">RESTRICTED WORKSPACE</p>
           <h1>Instructor access required</h1>
           <p>Sign in with an instructor or admin account to manage training modules.</p>
-          <button className="instructor-button primary" type="button" onClick={() => navigate('/lms')}>Back to LMS</button>
+          <button className="instructor-button primary" type="button" onClick={() => navigate('/')}>Back to home page</button>
         </section>
       </div>
     );
@@ -487,7 +487,6 @@ const InstructorLMSPage = () => {
         <section className="instructor-panel instructor-quiz-panel" aria-labelledby="instructor-quizzes-heading">
           <div className="instructor-section-head">
             <div><p className="instructor-eyebrow">ASSESSMENT CONTROL</p><h2 id="instructor-quizzes-heading">Quiz &amp; Exam Manager</h2></div>
-            <button className="instructor-button primary" type="button" onClick={() => openQuizBuilder(null)}><Icon name="plus" /> Create New Quiz / Exam</button>
           </div>
           <div className="instructor-assessment-list">
             {quizzes.map((quiz) => (

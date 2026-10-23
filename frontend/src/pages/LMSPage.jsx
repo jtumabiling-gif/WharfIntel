@@ -261,6 +261,7 @@ const LMSPage = () => {
   const [filter, setFilter] = useState('All courses');
   const [search, setSearch] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState(null);
+  const [selectedAssessmentResult, setSelectedAssessmentResult] = useState(null);
   const [expandedLessonId, setExpandedLessonId] = useState(null);
   const [attachmentError, setAttachmentError] = useState('');
   const [quizzes, setQuizzes] = useState([]);
@@ -314,11 +315,14 @@ const LMSPage = () => {
   useEffect(() => {
     if (!selectedCourse) return undefined;
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setSelectedCourseId(null);
+      if (event.key === 'Escape') {
+        if (selectedAssessmentResult) setSelectedAssessmentResult(null);
+        else setSelectedCourseId(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCourse]);
+  }, [selectedCourse, selectedAssessmentResult]);
 
   const completedLessons = courses.reduce(
     (total, course) => total + getCourseProgress(course).completed,
@@ -414,6 +418,10 @@ const LMSPage = () => {
 
   const openExam = (quiz) => {
     window.open(`/lms/exam/${encodeURIComponent(quiz.id)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const openAssessmentResult = (quiz, attempt) => {
+    setSelectedAssessmentResult({ quiz, attempt });
   };
 
   const getAssessmentStatus = (quiz) => {
@@ -627,8 +635,39 @@ const LMSPage = () => {
                         <article className="lms-assessment-row" key={quiz.id}>
                           <div><strong>{quiz.title}</strong><span>{quiz.questions?.length || 0} questions · {quiz.timeLimit} min · {quiz.maxAttempts} attempt{Number(quiz.maxAttempts) === 1 ? '' : 's'}</span></div>
                           <span className={`lms-assessment-status status-${status.toLowerCase().replace(' ', '-')}`}>{status}</span>
-                          <button type="button" disabled={!canTake && !canViewResult} onClick={() => openExam(quiz)}>{canTake ? inProgress ? 'Resume exam' : 'Take exam' : canViewResult ? 'View result' : 'Take exam'} <span aria-hidden="true">↗</span></button>
-                          {canTake && canViewResult && <button type="button" onClick={() => openExam(quiz)}>View result <span aria-hidden="true">↗</span></button>}
+                          <div className="lms-assessment-actions">
+                            {canTake && (
+                              <button
+                                className="lms-result-button is-launch"
+                                type="button"
+                                onClick={() => openExam(quiz)}
+                                aria-label={`${inProgress ? 'Resume' : 'Take'} ${quiz.title}`}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M14 4h6v6" />
+                                  <path d="m20 4-9 9" />
+                                  <path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6" />
+                                </svg>
+                                <span>{inProgress ? 'Resume exam' : 'Take exam'}</span>
+                                <span className="lms-result-button-arrow" aria-hidden="true">→</span>
+                              </button>
+                            )}
+                            {canViewResult && (
+                              <button
+                                className={`lms-result-button ${latestAttempt.status === 'Graded' ? 'is-released' : 'is-pending'}`}
+                                type="button"
+                                onClick={() => openAssessmentResult(quiz, latestAttempt)}
+                                aria-label={latestAttempt.status === 'Graded' ? `View released result for ${quiz.title}` : `Check review status for ${quiz.title}`}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+                                  <circle cx="12" cy="12" r="2.5" />
+                                </svg>
+                                <span>{latestAttempt.status === 'Graded' ? 'View result' : 'Check review status'}</span>
+                                <span className="lms-result-button-arrow" aria-hidden="true">→</span>
+                              </button>
+                            )}
+                          </div>
                           {!available && <small className="lms-assessment-availability">{quiz.availableFrom && !isAssessmentAvailable({ availableFrom: quiz.availableFrom }) ? 'Not available yet' : 'Availability ended'}</small>}
                         </article>
                       );
@@ -637,6 +676,80 @@ const LMSPage = () => {
                   </div>
                 </section>
                 <footer className="lms-modal-footer"><span>Progress saves automatically to this profile.</span><button type="button" onClick={() => setSelectedCourseId(null)}>Done</button></footer>
+              </MotionSection>
+            </MotionDiv>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {selectedAssessmentResult && (
+            <MotionDiv
+              className="lms-modal-backdrop lms-result-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedAssessmentResult(null); }}
+            >
+              <MotionSection
+                className="lms-course-modal lms-result-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="lms-result-title"
+                initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: 10, scale: 0.98 }}
+              >
+                <header className="lms-modal-header">
+                  <div>
+                    <p className="lms-eyebrow">ASSESSMENT / RESULT</p>
+                    <h2 id="lms-result-title">{selectedAssessmentResult.quiz.title}</h2>
+                  </div>
+                  <button className="lms-modal-close" type="button" onClick={() => setSelectedAssessmentResult(null)} aria-label="Close assessment result">×</button>
+                </header>
+                {selectedAssessmentResult.attempt.status === 'Pending Review' || selectedAssessmentResult.attempt.status === 'Submitted' ? (
+                  <div className="lms-result-pending" role="status">
+                    <span className="lms-result-badge pending">IN REVIEW</span>
+                    <h3>Submitted / Pending Review</h3>
+                    <p>Your submission has been received and is waiting for instructor evaluation.</p>
+                    <small>Your final score and pass status will appear here after your instructor releases the grade.</small>
+                  </div>
+                ) : selectedAssessmentResult.attempt.status === 'Graded' ? (
+                  <div className="lms-result-content">
+                    <div className={`lms-result-outcome ${selectedAssessmentResult.attempt.passed === true ? 'passed' : 'failed'}`}>
+                      <span className={`lms-result-badge ${selectedAssessmentResult.attempt.passed === true ? 'passed' : 'failed'}`}>
+                        {selectedAssessmentResult.attempt.passed === true ? 'PASS' : 'FAIL'}
+                      </span>
+                      <h3>{selectedAssessmentResult.attempt.passed === true ? 'Assessment passed' : 'Assessment failed'}</h3>
+                      <p>Your instructor has released your final score.</p>
+                    </div>
+                    <div className="lms-result-score-grid">
+                      <div><span>Score</span><strong>{selectedAssessmentResult.attempt.percentage}%</strong></div>
+                      <div><span>Points</span><strong>{selectedAssessmentResult.attempt.earnedPoints} / {selectedAssessmentResult.attempt.possiblePoints}</strong></div>
+                      <div><span>Passing score</span><strong>{selectedAssessmentResult.quiz.passingScore}%</strong></div>
+                    </div>
+                    {selectedAssessmentResult.quiz.questions.some((question) => selectedAssessmentResult.attempt.manualGrades?.[question.id]?.feedback?.trim()) && (
+                      <section className="lms-result-feedback">
+                        <h4>Instructor feedback</h4>
+                        {selectedAssessmentResult.quiz.questions.filter((question) => selectedAssessmentResult.attempt.manualGrades?.[question.id]?.feedback?.trim()).map((question) => (
+                          <article key={question.id}>
+                            <strong>{question.prompt}</strong>
+                            <p>{selectedAssessmentResult.attempt.manualGrades[question.id].feedback}</p>
+                          </article>
+                        ))}
+                      </section>
+                    )}
+                    <p className="lms-result-attempt">Attempt {selectedAssessmentResult.attempt.attemptNumber || 1} of {selectedAssessmentResult.quiz.maxAttempts}</p>
+                  </div>
+                ) : (
+                  <div className="lms-result-pending" role="status">
+                    <span className="lms-result-badge pending">IN PROGRESS</span>
+                    <h3>This assessment is still in progress</h3>
+                    <p>Resume the assessment to continue. Your result will be available here after you submit and your instructor releases a grade.</p>
+                  </div>
+                )}
+                <footer className="lms-modal-footer">
+                  <span>Assessment results update after instructor evaluation.</span>
+                  <button type="button" onClick={() => setSelectedAssessmentResult(null)}>Done</button>
+                </footer>
               </MotionSection>
             </MotionDiv>
           )}
