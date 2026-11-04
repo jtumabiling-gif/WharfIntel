@@ -2,9 +2,53 @@ import { loadQuizAttempts, loadQuizzes } from './quizStore';
 
 export const MODULES_STORAGE_KEY = 'wharfintel:lms-instructor-modules:v1';
 export const LEARNER_PROGRESS_PREFIX = 'wharfintel:lms-progress:';
+export const LMS_NOTIFICATIONS_STORAGE_KEY = 'wharfintel:lms-notifications:v1';
 const LMS_FILES_DB = 'wharfintel-lms-files';
 const LMS_FILES_STORE = 'attachments';
 let filesDatabasePromise;
+
+export const loadLmsNotifications = () => {
+  const raw = localStorage.getItem(LMS_NOTIFICATIONS_STORAGE_KEY);
+  if (!raw) return [];
+  const notifications = JSON.parse(raw);
+  if (!Array.isArray(notifications)) throw new Error('Saved LMS notifications are invalid.');
+  return notifications;
+};
+
+const saveLmsNotifications = (notifications) => {
+  localStorage.setItem(LMS_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
+  window.dispatchEvent(new Event('lms-notifications-updated'));
+};
+
+export const publishLmsNotification = ({ recipientRole, recipientUsername, courseId, title, message, type = 'activity' }) => {
+  if (!recipientRole || !title?.trim() || !message?.trim()) {
+    throw new Error('A notification recipient, title, and message are required.');
+  }
+  const notification = {
+    id: globalThis.crypto?.randomUUID?.() || `notification-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    recipientRole,
+    ...(recipientUsername ? { recipientUsername } : {}),
+    ...(courseId ? { courseId } : {}),
+    title: title.trim(),
+    message: message.trim(),
+    type,
+    createdAt: new Date().toISOString(),
+    readBy: [],
+  };
+  saveLmsNotifications([notification, ...loadLmsNotifications()].slice(0, 200));
+  return notification;
+};
+
+export const markLmsNotificationsRead = (notificationIds, viewerId) => {
+  const ids = new Set(notificationIds);
+  if (!ids.size || !viewerId) return;
+  const notifications = loadLmsNotifications();
+  saveLmsNotifications(notifications.map((notification) => (
+    ids.has(notification.id)
+      ? { ...notification, readBy: [...new Set([...(notification.readBy || []), viewerId])] }
+      : notification
+  )));
+};
 
 const openFilesDatabase = () => {
   if (!globalThis.indexedDB) return Promise.reject(new Error('File storage is unavailable in this browser.'));

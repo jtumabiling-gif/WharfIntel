@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { loadInstructorModules } from './lmsStore';
+import { loadInstructorModules, publishLmsNotification } from './lmsStore';
 import { createAssessmentId, loadQuizzes, saveQuizzes } from './quizStore';
 import './InstructorQuizBuilder.css';
 
@@ -34,10 +35,12 @@ const getQuestionDefaults = (type, index) => ({
   answer: type === 'true-false' ? 'True' : type === 'multiple-choice' ? `Choice ${index + 1}A` : '',
 });
 
-const InstructorQuizBuilder = () => {
+const InstructorQuizBuilder = ({ quizId: initialQuizId, isModal = false, onClose, onSaved }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const quizId = searchParams.get('quizId');
+  const quizId = initialQuizId ?? searchParams.get('quizId');
+  const closeButtonRef = useRef(null);
+  const modalRef = useRef(null);
   const [initialData] = useState(() => {
     try {
       const found = quizId ? loadQuizzes().find((quiz) => quiz.id === quizId) : null;
@@ -57,6 +60,22 @@ const InstructorQuizBuilder = () => {
   const [isSaving, setIsSaving] = useState(false);
   const role = (localStorage.getItem('role') || '').toLowerCase();
   const authorized = role === 'admin' || role === 'instructor';
+
+  useEffect(() => {
+    if (!isModal) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    closeButtonRef.current?.focus({ preventScroll: true });
+    if (modalRef.current) modalRef.current.scrollTop = 0;
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isModal, onClose]);
 
   const updateField = (event) => {
     const { name, value } = event.target;
@@ -132,6 +151,24 @@ const InstructorQuizBuilder = () => {
       saveQuizzes(nextQuizzes);
       setForm(updated);
       setSavedMessage(status === 'Published' ? 'Assessment published for learners.' : 'Draft saved.');
+      let notificationWarning = '';
+      if (status === 'Published') {
+        const assignedCourse = modules.find((module) => module.id === updated.courseId);
+        try {
+          publishLmsNotification({
+            recipientRole: 'student',
+            ...(updated.courseId ? { courseId: updated.courseId } : {}),
+            title: quizzes.some((quiz) => quiz.id === updated.id) ? 'Assessment updated' : 'New assessment available',
+            message: assignedCourse
+              ? `${updated.title} is available for ${assignedCourse.title}.`
+              : `${updated.title} is now available in the LMS.`,
+            type: 'assessment',
+          });
+        } catch (notificationError) {
+          notificationWarning = notificationError.message || 'browser storage is unavailable';
+        }
+      }
+      onSaved?.(nextQuizzes, status, notificationWarning);
     } catch (saveError) {
       setError(saveError.message || 'Could not save this assessment in browser storage.');
     } finally {
@@ -140,21 +177,29 @@ const InstructorQuizBuilder = () => {
   };
 
   if (!authorized) {
-    return (
-      <main className="quiz-builder-page">
-        <section className="quiz-builder-card"><p className="quiz-eyebrow">RESTRICTED WORKSPACE</p><h1>Instructor access required</h1><button type="button" className="quiz-button primary" onClick={() => navigate('/lms')}>Back to LMS</button></section>
+    const restrictedContent = (
+      <main ref={modalRef} className={`quiz-builder-page${isModal ? ' quiz-builder-page-modal' : ''}`} role={isModal ? 'dialog' : undefined} aria-modal={isModal || undefined} aria-labelledby={isModal ? 'quiz-builder-heading' : undefined}>
+        <section className="quiz-builder-card"><p className="quiz-eyebrow">RESTRICTED WORKSPACE</p><h1 id="quiz-builder-heading">Instructor access required</h1><button type="button" className="quiz-button primary" onClick={() => (isModal ? onClose?.() : navigate('/lms'))}>{isModal ? 'Close' : 'Back to LMS'}</button></section>
       </main>
     );
+    return isModal ? createPortal(
+      <div className="quiz-builder-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose?.()}>
+        {restrictedContent}
+      </div>,
+      document.body
+    ) : restrictedContent;
   }
 
-  return (
-    <main className="quiz-builder-page">
+  const builderContent = (
+    <main ref={modalRef} className={`quiz-builder-page${isModal ? ' quiz-builder-page-modal' : ''}`} role={isModal ? 'dialog' : undefined} aria-modal={isModal || undefined} aria-labelledby={isModal ? 'quiz-builder-heading' : undefined}>
       <header className="quiz-builder-topbar">
-        <button type="button" className="quiz-button quiet" onClick={() => navigate('/lms/instructor')}>← Instructor dashboard</button>
+        {isModal
+          ? <button ref={closeButtonRef} type="button" className="quiz-button quiet" onClick={onClose} aria-label="Close assessment editor">Close</button>
+          : <button type="button" className="quiz-button quiet" onClick={() => navigate('/lms/instructor')}>← Instructor dashboard</button>}
         <span className="quiz-saved-indicator">ASSESSMENT WORKSPACE</span>
       </header>
       <div className="quiz-builder-content">
-        <div className="quiz-page-heading"><p className="quiz-eyebrow">LEARNING OPERATIONS / ASSESSMENT CONTROL</p><h1>{quizId ? 'Edit assessment' : 'Create assessment'}</h1><p>Configure questions, availability, timing, and learner attempts.</p></div>
+        <div className="quiz-page-heading"><p className="quiz-eyebrow">LEARNING OPERATIONS / ASSESSMENT CONTROL</p><h1 id="quiz-builder-heading">{quizId ? 'Edit assessment' : 'Create assessment'}</h1><p>Configure questions, availability, timing, and learner attempts.</p></div>
         <form className="quiz-builder-form" onSubmit={(event) => saveAssessment(event, 'Published')}>
           <section className="quiz-builder-card">
             <div className="quiz-card-heading"><div><p className="quiz-eyebrow">ASSESSMENT DETAILS</p><h2>Quiz / exam settings</h2></div><span className={`quiz-status-chip status-${form.status.toLowerCase()}`}>{form.status}</span></div>
@@ -226,6 +271,13 @@ const InstructorQuizBuilder = () => {
       </div>
     </main>
   );
+
+  return isModal ? createPortal(
+    <div className="quiz-builder-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose?.()}>
+      {builderContent}
+    </div>,
+    document.body
+  ) : builderContent;
 };
 
 export default InstructorQuizBuilder;

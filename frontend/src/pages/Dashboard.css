@@ -79,6 +79,8 @@
 
 .dashboard-wrapper.instructor-lms-layout .sidebar { display: none; }
 .dashboard-wrapper.instructor-lms-layout .map-view { width: 100vw; margin-left: 0; }
+.dashboard-wrapper.lms-route-layout .sidebar { display: none; }
+.dashboard-wrapper.lms-route-layout .map-view { width: 100vw; margin-left: 0; }
 
 .dashboard-route-content {
   position: absolute;

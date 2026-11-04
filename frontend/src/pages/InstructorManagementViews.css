@@ -58,8 +58,20 @@
 
 .student-batch-filter option { color: var(--instructor-text); background: #111c2d; }
 .student-directory-table { min-width: 1250px; }
-.student-directory-actions { display: flex; flex-wrap: wrap; gap: 5px; }
-.student-directory-actions .instructor-button { padding: 0 8px; font-size: 9px !important; }
+.student-directory-actions {
+  display: flex;
+  min-width: 450px;
+  align-items: center;
+  gap: 6px;
+}
+.student-directory-actions .instructor-button {
+  min-width: 0;
+  min-height: 32px;
+  flex: 1 1 0;
+  padding: 0 8px;
+  font-size: 9px !important;
+  white-space: nowrap;
+}
 
 .grading-backdrop { z-index: 5000; overflow-y: auto; }
 .grading-workspace, .student-action-modal {
@@ -119,6 +131,12 @@
 .student-enrollment-list small { color: var(--instructor-faint); font-size: 9px; }
 .student-certificate-content .instructor-field { margin-top: 15px; }
 .student-certificate-content .instructor-field select { width: 100%; }
+.instructor-page .student-action-modal .student-certificate-content .instructor-field select:focus,
+.instructor-page .student-action-modal .student-certificate-content .instructor-field select:focus-visible {
+  border-color: var(--instructor-border);
+  outline: none;
+  box-shadow: none;
+}
 .instructor-form-success { color: #86efac; font-size: 10px; }
 
 @media (max-width: 620px) {

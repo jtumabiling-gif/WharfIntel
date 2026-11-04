@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { loadLearnerProgress, LEARNER_PROGRESS_PREFIX } from './lmsStore';
+import { loadLearnerProgress, LEARNER_PROGRESS_PREFIX, publishLmsNotification } from './lmsStore';
 import { isAwaitingInstructorReview, loadQuizAttempts, saveQuizAttempts, scoreAssessment } from './quizStore';
 import './InstructorManagementViews.css';
 
@@ -176,6 +176,18 @@ export const SubmissionChecking = ({ modules, quizzes, onNotice }) => {
     });
 
     let progressNotice = '';
+    try {
+      publishLmsNotification({
+        recipientRole: 'student',
+        recipientUsername: submission.studentName,
+        ...(quiz.courseId ? { courseId: quiz.courseId } : {}),
+        title: 'Assessment grade released',
+        message: `${quiz.title} has been graded. Your score is ${percentage}%.`,
+        type: 'assessment',
+      });
+    } catch (notificationError) {
+      progressNotice = ` Your grade was saved, but its notification could not be sent: ${notificationError.message || 'browser storage is unavailable'}.`;
+    }
     if (quiz.courseId) {
       try {
         const progressKey = `${LEARNER_PROGRESS_PREFIX}${submission.studentName}`;
@@ -187,7 +199,7 @@ export const SubmissionChecking = ({ modules, quizzes, onNotice }) => {
           __lastActivity: releasedAttempt.gradedAt,
         }));
       } catch (progressError) {
-        progressNotice = ` Course progress could not be refreshed: ${progressError.message || 'browser storage is unavailable'}.`;
+        progressNotice += ` Course progress could not be refreshed: ${progressError.message || 'browser storage is unavailable'}.`;
       }
     }
     setRefreshRevision((revision) => revision + 1);
@@ -323,7 +335,7 @@ const StudentActionModal = ({ student, mode, modules, onClose, onSaveEnrollment,
                   if (event.target.checked) next.add(module.id);
                   else next.delete(module.id);
                   return next;
-                })} /><span>{module.title}<small>{module.targetAudience || module.category}</small></span></label>
+                })} /><span>{module.title}<small>{module.programYearSection || module.targetAudience || module.category}</small></span></label>
               ))}
             </div>
             {error && <p className="instructor-form-error" role="alert">{error}</p>}
@@ -357,14 +369,15 @@ export const StudentManagement = ({ modules, quizzes, onNotice }) => {
     }
   })();
   const students = snapshot.students;
-  const batches = [...new Set(modules.map((module) => module.targetAudience).filter(Boolean))].sort();
+  const batches = [...new Set(modules.map((module) => module.programYearSection || module.targetAudience).filter(Boolean))].sort();
 
   const filteredStudents = students.filter((student) => {
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || `${student.username} ${student.username}`.toLowerCase().includes(query);
-    const matchesBatch = batch === 'All batches' || student.courses.some((course) => (
-      modules.find((module) => module.id === course.courseId)?.targetAudience === batch
-    ));
+    const matchesBatch = batch === 'All batches' || student.courses.some((course) => {
+      const module = modules.find((item) => item.id === course.courseId);
+      return (module?.programYearSection || module?.targetAudience) === batch;
+    });
     return matchesSearch && matchesBatch;
   });
 
@@ -372,13 +385,33 @@ export const StudentManagement = ({ modules, quizzes, onNotice }) => {
     const progressKey = `${LEARNER_PROGRESS_PREFIX}${student.username}`;
     const saved = JSON.parse(localStorage.getItem(progressKey) || '{}');
     const moduleById = new Map(modules.map((module) => [module.id, module]));
+    const previousCourseIds = new Set(student.courses.map((course) => course.courseId));
+    const newlyEnrolledIds = courseIds.filter((courseId) => !previousCourseIds.has(courseId));
     courseIds.forEach((courseId) => {
       if (!saved[courseId]) saved[courseId] = Object.fromEntries((moduleById.get(courseId)?.sections || []).map((section) => [section.id, false]));
     });
     saved.__enrolledCourses = courseIds;
     localStorage.setItem(progressKey, JSON.stringify(saved));
+    let notificationWarning = '';
+    newlyEnrolledIds.forEach((courseId) => {
+      const courseTitle = moduleById.get(courseId)?.title || 'a course';
+      try {
+        publishLmsNotification({
+          recipientRole: 'student',
+          recipientUsername: student.username,
+          courseId,
+          title: 'New course enrollment',
+          message: `${courseTitle} has been added to your LMS courses.`,
+          type: 'enrollment',
+        });
+      } catch (notificationError) {
+        notificationWarning = notificationError.message || 'browser storage is unavailable';
+      }
+    });
     setRefreshRevision((revision) => revision + 1);
-    onNotice(`Course enrolment updated for ${student.username}.`);
+    onNotice(notificationWarning
+      ? `Course enrolment updated for ${student.username}, but a notification could not be sent: ${notificationWarning}.`
+      : `Course enrolment updated for ${student.username}.`);
   };
 
   const issueCertificate = (student, courseId) => {

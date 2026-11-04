@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   deleteLmsAttachment,
   loadInstructorModules,
   loadLearnerProgress,
+  publishLmsNotification,
   saveLmsAttachment,
   saveInstructorModules,
 } from './lmsStore';
 import { isAwaitingInstructorReview, loadQuizAttempts, loadQuizzes, QUIZZES_STORAGE_KEY } from './quizStore';
 import { StudentManagement, SubmissionChecking } from './InstructorManagementViews';
+import InstructorQuizBuilder from './InstructorQuizBuilder';
+import InstructorWorkspaceSidebar from './InstructorWorkspaceSidebar';
+import WorkspaceThemeToggle from './WorkspaceThemeToggle';
+import useWorkspaceTheme from './useWorkspaceTheme';
 import './InstructorLMSPage.css';
 
 const MotionDiv = motion.div;
@@ -40,8 +45,10 @@ const blankModule = () => ({
   title: '',
   description: '',
   category: CATEGORIES[0],
+  courseCode: '',
+  programYearSection: '',
+  courseUnits: '',
   resourceUrl: '',
-  targetAudience: '',
   deadline: '',
   status: 'Draft',
   sections: [createSection('Lesson 1')],
@@ -165,8 +172,16 @@ const ModuleModal = ({ module, mode, onClose, onSave }) => {
                 </select>
               </label>
               <label className="instructor-field">
-                <span>Target audience <i>*</i></span>
-                <input name="targetAudience" value={form.targetAudience} onChange={updateField} maxLength={100} placeholder="Role or batch" required />
+                <span>Course code</span>
+                <input name="courseCode" value={form.courseCode || ''} onChange={updateField} maxLength={30} placeholder="e.g. MTR 101" />
+              </label>
+              <label className="instructor-field">
+                <span>Program / Year / Section</span>
+                <input name="programYearSection" value={form.programYearSection || ''} onChange={updateField} maxLength={100} placeholder="e.g. BSMT 1-A" />
+              </label>
+              <label className="instructor-field">
+                <span>Course units</span>
+                <input name="courseUnits" type="number" min="0" step="0.25" value={form.courseUnits ?? ''} onChange={updateField} placeholder="e.g. 3" />
               </label>
               <section className="instructor-sections-field instructor-field-wide" aria-labelledby="module-sections-title">
                 <div className="instructor-sections-heading">
@@ -241,25 +256,33 @@ const ModuleModal = ({ module, mode, onClose, onSave }) => {
 const InstructorLMSPage = () => {
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
+  const [isLightMode, toggleTheme] = useWorkspaceTheme();
   const role = (localStorage.getItem('role') || '').toLowerCase();
   const authorized = role === 'admin' || role === 'instructor';
   const [modules, setModules] = useState(() => loadInstructorModules());
   const [filter, setFilter] = useState('All Modules');
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(null);
+  const [quizBuilder, setQuizBuilder] = useState(null);
   const [, setRefreshTick] = useState(0);
   const [notice, setNotice] = useState('');
   const [quizzes, setQuizzes] = useState([]);
-  const [activeTab, setActiveTab] = useState(() => (
-    countPendingQuizReviews() ? 'submissions' : 'courses'
-  ));
+  const [attempts, setAttempts] = useState({});
+  const [activeTab, setActiveTab] = useState('overview');
   const pendingQuizReviews = countPendingQuizReviews();
+  const username = localStorage.getItem('username') || 'instructor';
+
+  const navigateWorkspaceSection = (section) => {
+    setActiveTab(section);
+    document.querySelector('.instructor-content-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     const refreshQuizzes = (event) => {
       if (event?.key && event.key !== QUIZZES_STORAGE_KEY) return;
       try {
         setQuizzes(loadQuizzes());
+        setAttempts(loadQuizAttempts());
       } catch (error) {
         setNotice(error.message || 'Could not load assessment data.');
       }
@@ -287,7 +310,7 @@ const InstructorLMSPage = () => {
   const visibleModules = modules.filter((module) => module.status !== 'Deleted').filter((module) => {
     const matchesFilter = filter === 'All Modules' || module.status === filter.replace(/s$/, '');
     const query = search.trim().toLowerCase();
-    const matchesSearch = !query || `${module.title} ${module.category} ${module.targetAudience}`.toLowerCase().includes(query);
+    const matchesSearch = !query || `${module.title} ${module.category} ${module.programYearSection || module.targetAudience || ''}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   });
   const activeModules = modules.filter((module) => module.status === 'Active');
@@ -308,6 +331,14 @@ const InstructorLMSPage = () => {
 
   const saveModule = async (form) => {
     const currentModule = modal.module;
+    let notificationWarning = '';
+    const notifyStudents = (notification) => {
+      try {
+        publishLmsNotification({ recipientRole: 'student', ...notification });
+      } catch (notificationError) {
+        notificationWarning = notificationError.message || 'browser storage is unavailable';
+      }
+    };
     const sections = [];
     for (const section of form.sections) {
       const { pendingFile, ...savedSection } = section;
@@ -326,21 +357,61 @@ const InstructorLMSPage = () => {
         .map(deleteLmsAttachment));
     }
 
-    const savedForm = { ...form, sections, updatedAt: new Date().toISOString() };
+    const savedForm = {
+      ...form,
+      faculty: currentModule?.faculty || username,
+      sections,
+      updatedAt: new Date().toISOString(),
+    };
     if (modal.mode === 'deadline') {
+      if (currentModule.deadline !== form.deadline) {
+        notifyStudents({
+          courseId: currentModule.id,
+          title: 'Course deadline updated',
+          message: `${currentModule.title} is now due ${form.deadline}.`,
+          type: 'deadline',
+        });
+      }
       setModules((current) => current.map((module) => (
         module.id === modal.module.id ? { ...module, deadline: form.deadline, updatedAt: new Date().toISOString() } : module
       )));
     } else if (modal.module) {
+      if (currentModule.status !== 'Active' && savedForm.status === 'Active') {
+        notifyStudents({
+          courseId: currentModule.id,
+          title: 'New course available',
+          message: `${savedForm.title} is now available in your LMS.`,
+          type: 'activity',
+        });
+      }
+      if (currentModule.deadline !== savedForm.deadline) {
+        notifyStudents({
+          courseId: currentModule.id,
+          title: 'Course deadline updated',
+          message: `${savedForm.title} is now due ${savedForm.deadline || 'without a deadline'}.`,
+          type: 'deadline',
+        });
+      }
       setModules((current) => current.map((module) => (
         module.id === modal.module.id ? { ...module, ...savedForm } : module
       )));
     } else {
       const id = globalThis.crypto?.randomUUID?.() || `module-${Date.now()}`;
       setModules((current) => [{ ...savedForm, id }, ...current]);
+      if (savedForm.status === 'Active') {
+        notifyStudents({
+          courseId: id,
+          title: 'New course available',
+          message: savedForm.deadline
+            ? `${savedForm.title} is available in your LMS and is due ${savedForm.deadline}.`
+            : `${savedForm.title} is now available in your LMS.`,
+          type: savedForm.deadline ? 'deadline' : 'activity',
+        });
+      }
     }
     setModal(null);
-    setNotice(modal.mode === 'deadline' ? 'Deadline updated.' : modal.module ? 'Module updated.' : 'Module created.');
+    const noticeText = modal.mode === 'deadline' ? 'Deadline updated.' : modal.module ? 'Module updated.' : 'Module created.';
+    setNotice(notificationWarning ? `${noticeText} Notification warning: ${notificationWarning}.` : noticeText);
     window.setTimeout(() => setNotice(''), 2800);
   };
 
@@ -354,9 +425,9 @@ const InstructorLMSPage = () => {
   };
 
   const openQuizBuilder = (quiz) => {
-    const query = quiz ? `?quizId=${encodeURIComponent(quiz.id)}` : '';
-    window.open(`/lms/instructor/quiz-builder${query}`, '_blank', 'noopener,noreferrer');
+    setQuizBuilder({ quizId: quiz?.id || null });
   };
+  const closeQuizBuilder = useCallback(() => setQuizBuilder(null), []);
 
   const courseTitle = (courseId) => modules.find((module) => module.id === courseId)?.title || 'General assessment';
 
@@ -366,6 +437,21 @@ const InstructorLMSPage = () => {
     { label: 'Pending Submissions', value: pendingSubmissions, detail: 'Incomplete learner modules', icon: 'pending', tone: 'amber' },
     { label: 'Approaching Deadlines', value: approachingDeadlines, detail: 'Due in the next 7 days', icon: 'deadline', tone: 'rose' },
   ];
+  const quizById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
+  const recentActivity = Object.entries(attempts)
+    .flatMap(([studentName, studentAttempts]) => (
+      Array.isArray(studentAttempts)
+        ? studentAttempts.map((attempt) => ({ ...attempt, studentName, quiz: quizById.get(attempt.quizId) }))
+        : []
+    ))
+    .filter((attempt) => attempt.quiz)
+    .sort((left, right) => new Date(right.submittedAt || right.startedAt || 0) - new Date(left.submittedAt || left.startedAt || 0))
+    .slice(0, 5);
+  const today = new Date().toISOString().slice(0, 10);
+  const upcomingModules = activeModules
+    .filter((module) => module.deadline && module.deadline >= today)
+    .sort((left, right) => left.deadline.localeCompare(right.deadline))
+    .slice(0, 5);
 
   const entrance = reduceMotion
     ? { initial: false, animate: { opacity: 1, y: 0 } }
@@ -382,6 +468,29 @@ const InstructorLMSPage = () => {
     window.setTimeout(() => setNotice(''), 2800);
   };
 
+  const handleAssessmentSaved = (nextQuizzes, status, notificationWarning = '') => {
+    setQuizzes(nextQuizzes);
+    if (status === 'Published') {
+      closeQuizBuilder();
+      showNotice(notificationWarning
+        ? `Assessment published, but its notification could not be sent: ${notificationWarning}.`
+        : 'Assessment published successfully.');
+    }
+  };
+
+  const openModuleModal = () => setModal({ mode: 'create', module: null });
+  const instructorNavSection = activeTab === 'students'
+    ? 'students'
+    : activeTab === 'submissions'
+      ? 'submissions'
+      : activeTab === 'assessments'
+        ? 'assessments'
+        : activeTab === 'schedule'
+          ? 'schedule'
+          : activeTab === 'courses'
+            ? 'courses'
+            : 'overview';
+
   if (!authorized) {
     return (
       <div className="instructor-page">
@@ -396,19 +505,20 @@ const InstructorLMSPage = () => {
   }
 
   return (
-    <div className="instructor-page">
+    <div className={`instructor-page instructor-workspace-layout ${isLightMode ? '' : 'theme-dark'}`}>
+      <InstructorWorkspaceSidebar
+        activeSection={instructorNavSection}
+        onNavigate={navigateWorkspaceSection}
+        onLogout={handleLogout}
+        pendingCount={pendingQuizReviews}
+        username={username}
+      />
       <div className="instructor-shell">
         <header className="instructor-topbar">
-          <button className="instructor-back-button" type="button" onClick={handleLogout}>
-            <Icon name="back" /> Logout
-          </button>
+          <span className="instructor-breadcrumb">INSTRUCTOR WORKSPACE <span>/</span> {instructorNavSection.replace('students', 'LEARNERS').replace('submissions', 'SUBMISSION REVIEW').replace('assessments', 'ASSESSMENTS').replace('schedule', 'TRAINING SCHEDULE').replace('courses', 'COURSE MANAGEMENT').replace('overview', 'DASHBOARD').toUpperCase()}</span>
           <div className="instructor-topbar-actions">
-            <button className="instructor-button primary instructor-add-button" type="button" onClick={() => setModal({ mode: 'create', module: null })}>
-              <Icon name="plus" /> Add New Module
-            </button>
-            <button className="instructor-button primary instructor-quiz-create" type="button" onClick={() => openQuizBuilder(null)}>
-              <Icon name="plus" /> Create New Quiz / Exam
-            </button>
+            <WorkspaceThemeToggle isLightMode={isLightMode} onToggle={toggleTheme} />
+            <span className="instructor-topbar-user"><i /> {username}</span>
           </div>
         </header>
 
@@ -416,34 +526,104 @@ const InstructorLMSPage = () => {
         <MotionSection className="instructor-heading" {...entrance} transition={{ duration: 0.3 }}>
           <div>
             <p className="instructor-eyebrow"><span /> TRAINING OPERATIONS / INSTRUCTOR PORTAL</p>
-            <h1>Instructor Dashboard</h1>
-            <p>Manage course delivery, deadlines, and crew progress.</p>
+            <h1>{instructorNavSection === 'overview' ? `Welcome back, ${username}` : instructorNavSection === 'students' ? 'Learner management' : instructorNavSection === 'submissions' ? 'Submission review' : instructorNavSection === 'assessments' ? 'Assessments' : instructorNavSection === 'schedule' ? 'Training schedule' : instructorNavSection === 'courses' ? 'Course management' : 'Instructor dashboard'}</h1>
+            <p>{instructorNavSection === 'overview' ? 'Here’s what’s happening across your training program today.' : instructorNavSection === 'students' ? 'Monitor learner activity and course progress.' : instructorNavSection === 'submissions' ? 'Review assessment submissions and release grades.' : instructorNavSection === 'assessments' ? 'Create, publish, and maintain course quizzes and exams.' : instructorNavSection === 'schedule' ? 'Keep upcoming training deadlines in view.' : 'Manage course delivery, modules, and learner deadlines.'}</p>
           </div>
-          <span className="instructor-live-indicator"><i /> LOCAL COURSE DATA</span>
+          {instructorNavSection === 'overview' && (
+            <div className="instructor-quick-actions">
+              <button type="button" onClick={openModuleModal}><Icon name="plus" /><span>Create module</span></button>
+              <button type="button" onClick={() => openQuizBuilder(null)}><Icon name="edit" /><span>Create assessment</span></button>
+              <button type="button" onClick={() => navigateWorkspaceSection('submissions')}><Icon name="pending" /><span>Review submissions</span></button>
+            </div>
+          )}
         </MotionSection>
 
-        <nav className="instructor-main-tabs" aria-label="Instructor dashboard sections">
-          <button type="button" className={activeTab === 'courses' ? 'selected' : ''} onClick={() => setActiveTab('courses')} aria-current={activeTab === 'courses' ? 'page' : undefined}>Course Management</button>
-          <button type="button" className={activeTab === 'submissions' ? 'selected' : ''} onClick={() => setActiveTab('submissions')} aria-current={activeTab === 'submissions' ? 'page' : undefined}>
-            Submission Checking{pendingQuizReviews > 0 && <span className="instructor-tab-count">{pendingQuizReviews}</span>}
-          </button>
-          <button type="button" className={activeTab === 'students' ? 'selected' : ''} onClick={() => setActiveTab('students')} aria-current={activeTab === 'students' ? 'page' : undefined}>Student Management</button>
-        </nav>
+        {activeTab === 'overview' && (
+          <>
+            <section className="instructor-metrics" aria-label="Instructor metrics">
+              {metrics.map((metric, index) => (
+                <MotionArticle className="instructor-metric-card" key={metric.label} {...entrance} transition={{ delay: reduceMotion ? 0 : index * 0.055, duration: 0.28 }}>
+                  <div className="instructor-metric-copy"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div>
+                  <span className={`instructor-metric-icon tone-${metric.tone}`}><Icon name={metric.icon} /></span>
+                </MotionArticle>
+              ))}
+            </section>
+            <div className="instructor-overview-grid">
+              <section className="instructor-panel instructor-activity-panel" aria-labelledby="instructor-activity-title">
+                <div className="instructor-section-head">
+                  <div><p className="instructor-eyebrow">LATEST UPDATES</p><h2 id="instructor-activity-title">Recent assessment activity</h2></div>
+                  <button className="instructor-panel-link" type="button" onClick={() => navigateWorkspaceSection('submissions')}>Review submissions <span aria-hidden="true">›</span></button>
+                </div>
+                {recentActivity.length ? (
+                  <div className="instructor-activity-list">
+                    {recentActivity.map((activity) => {
+                      const waiting = isAwaitingInstructorReview(activity);
+                      const stamp = activity.submittedAt || activity.startedAt;
+                      const time = stamp && !Number.isNaN(new Date(stamp).getTime())
+                        ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(stamp))
+                        : 'Time unavailable';
+                      return (
+                        <article className="instructor-activity-row" key={activity.id}>
+                          <span className={`instructor-activity-avatar ${waiting ? 'is-pending' : ''}`}>{activity.studentName.slice(0, 1).toUpperCase()}</span>
+                          <div><strong>{activity.studentName}</strong><span>{activity.quiz.title}</span></div>
+                          <span className={`instructor-activity-status ${waiting ? 'is-pending' : activity.status === 'Graded' ? 'is-complete' : ''}`}>{waiting ? 'Needs review' : activity.status}</span>
+                          <time>{time}</time>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : <p className="instructor-overview-empty">Assessment activity will appear here after learners begin submitting work.</p>}
+              </section>
+              <section className="instructor-panel instructor-agenda-panel" aria-labelledby="instructor-agenda-title">
+                <div className="instructor-section-head">
+                  <div><p className="instructor-eyebrow">COURSE DELIVERY</p><h2 id="instructor-agenda-title">Upcoming deadlines</h2></div>
+                  <button className="instructor-panel-link" type="button" onClick={() => navigateWorkspaceSection('schedule')}>View schedule <span aria-hidden="true">›</span></button>
+                </div>
+                {upcomingModules.length ? (
+                  <div className="instructor-agenda-list">
+                    {upcomingModules.map((module) => (
+                      <article className="instructor-agenda-row" key={module.id}>
+                        <span>{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${module.deadline}T00:00:00`))}</span>
+                        <div><strong>{module.title}</strong><small>{module.programYearSection || module.targetAudience || module.category}</small></div>
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="instructor-overview-empty">No upcoming deadlines. Add a deadline to an active course to see it here.</p>}
+              </section>
+            </div>
+            <section className="instructor-panel instructor-overview-courses" aria-labelledby="instructor-overview-courses-title">
+              <div className="instructor-section-head">
+                <div><p className="instructor-eyebrow">YOUR TRAINING CONTENT</p><h2 id="instructor-overview-courses-title">Active courses</h2></div>
+                <button className="instructor-panel-link" type="button" onClick={() => navigateWorkspaceSection('courses')}>Manage courses <span aria-hidden="true">›</span></button>
+              </div>
+              <div className="instructor-course-summary-grid">
+                {activeModules.slice(0, 4).map((module) => (
+                  <article className="instructor-course-summary" key={module.id}>
+                    <span className="instructor-course-summary-icon"><Icon name="modules" /></span>
+                    <div><strong>{module.title}</strong><span>{module.sections?.length || 0} lessons · {module.programYearSection || module.targetAudience || module.category}</span></div>
+                    <span className="instructor-status status-active">Active</span>
+                  </article>
+                ))}
+                {!activeModules.length && <p className="instructor-overview-empty">No active courses yet. Create a module to get started.</p>}
+              </div>
+            </section>
+          </>
+        )}
 
         {activeTab === 'submissions' && <SubmissionChecking modules={modules} quizzes={quizzes} onNotice={showNotice} />}
         {activeTab === 'students' && <StudentManagement modules={modules} quizzes={quizzes} onNotice={showNotice} />}
 
-        {activeTab === 'courses' && <>
-        <section className="instructor-metrics" aria-label="Instructor metrics">
+        {(activeTab === 'courses' || activeTab === 'assessments') && <>
+        {activeTab === 'courses' && <section className="instructor-metrics" aria-label="Instructor metrics">
           {metrics.map((metric, index) => (
             <MotionArticle className="instructor-metric-card" key={metric.label} {...entrance} transition={{ delay: reduceMotion ? 0 : index * 0.055, duration: 0.28 }}>
               <div className="instructor-metric-copy"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div>
               <span className={`instructor-metric-icon tone-${metric.tone}`}><Icon name={metric.icon} /></span>
             </MotionArticle>
           ))}
-        </section>
+        </section>}
 
-        <section className="instructor-panel" aria-labelledby="instructor-modules-heading">
+        {activeTab === 'courses' && <section className="instructor-panel" aria-labelledby="instructor-modules-heading">
           <div className="instructor-section-head">
             <div><p className="instructor-eyebrow">CONTENT CONTROL</p><h2 id="instructor-modules-heading">Course &amp; module management</h2></div>
             <label className="instructor-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search modules" aria-label="Search modules" /></label>
@@ -458,7 +638,7 @@ const InstructorLMSPage = () => {
           </div>
           <div className="instructor-table-wrap">
             <table className="instructor-table">
-              <thead><tr><th>Module</th><th>Target role / batch</th><th>Assigned deadline</th><th>Completion</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th>Module</th><th>Program / Year / Section</th><th>Assigned deadline</th><th>Completion</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {visibleModules.map((module) => {
                   const rate = getModuleRate(module.id);
@@ -466,7 +646,7 @@ const InstructorLMSPage = () => {
                   return (
                     <tr key={module.id}>
                       <td><div className="instructor-module-name"><strong>{module.title}</strong><span>{module.category}{module.resourceUrl && <a href={module.resourceUrl} target="_blank" rel="noreferrer" aria-label={`Open learning resource for ${module.title}`}><Icon name="external" /></a>}</span></div></td>
-                      <td><span className="instructor-audience">{module.targetAudience}</span></td>
+                      <td><span className="instructor-audience">{module.programYearSection || module.targetAudience || 'Not set'}</span></td>
                       <td><span className={`instructor-deadline tone-${dueTone}`}><Icon name="calendar" />{formatDate(module.deadline)}</span></td>
                       <td><div className="instructor-completion"><span><i style={{ width: `${rate}%` }} /></span><strong>{rate}%</strong></div><small className="instructor-learner-count">{learners.filter((learner) => learner.courseId === module.id).length} learners</small></td>
                       <td><span className={`instructor-status status-${module.status.toLowerCase()}`}>{module.status}</span></td>
@@ -482,25 +662,26 @@ const InstructorLMSPage = () => {
             </table>
             {visibleModules.length === 0 && <p className="instructor-empty">No modules in this view. Add a module to start building your training plan.</p>}
           </div>
-        </section>
+        </section>}
 
-        <section className="instructor-panel instructor-quiz-panel" aria-labelledby="instructor-quizzes-heading">
+        <section className="instructor-panel instructor-quiz-panel" id="instructor-assessments" aria-labelledby="instructor-quizzes-heading">
           <div className="instructor-section-head">
             <div><p className="instructor-eyebrow">ASSESSMENT CONTROL</p><h2 id="instructor-quizzes-heading">Quiz &amp; Exam Manager</h2></div>
+            <button className="instructor-button primary" type="button" onClick={() => openQuizBuilder(null)}><Icon name="plus" /> Create assessment</button>
           </div>
           <div className="instructor-assessment-list">
             {quizzes.map((quiz) => (
               <article className="instructor-assessment-row" key={quiz.id}>
                 <div><strong>{quiz.title}</strong><span>{courseTitle(quiz.courseId)} · {quiz.questions?.length || 0} questions · {quiz.timeLimit} min</span></div>
                 <span className={`instructor-status status-${String(quiz.status).toLowerCase()}`}>{quiz.status}</span>
-                <button className="instructor-button secondary" type="button" onClick={() => openQuizBuilder(quiz)}>Edit in new tab <Icon name="external" /></button>
+                <button className="instructor-button secondary" type="button" onClick={() => openQuizBuilder(quiz)}>Edit assessment</button>
               </article>
             ))}
             {quizzes.length === 0 && <p className="instructor-empty">No quizzes or exams yet. Create an assessment to assign it to a course.</p>}
           </div>
         </section>
 
-        <section className="instructor-panel instructor-students-panel" aria-labelledby="instructor-students-heading">
+        {activeTab === 'courses' && <section className="instructor-panel instructor-students-panel" aria-labelledby="instructor-students-heading">
           <div className="instructor-section-head">
             <div><p className="instructor-eyebrow">LEARNER ACTIVITY</p><h2 id="instructor-students-heading">Student progress tracker</h2></div>
             <span className="instructor-count">{learners.length} ENROLLMENT{learners.length === 1 ? '' : 'S'}</span>
@@ -522,16 +703,47 @@ const InstructorLMSPage = () => {
             </table>
             {learners.length === 0 && <p className="instructor-empty">No learner progress is recorded yet. Student activity will appear here as they complete modules.</p>}
           </div>
-        </section>
+        </section>}
 
-        <p className="instructor-data-note">Progress is read from learner activity saved in this browser. Connect an LMS API for shared, multi-device records.</p>
+        {activeTab === 'courses' && <p className="instructor-data-note">Progress is read from learner activity saved in this browser. Connect an LMS API for shared, multi-device records.</p>}
         </>}
+
+        {activeTab === 'schedule' && (
+          <section className="instructor-panel instructor-schedule-panel" aria-labelledby="instructor-schedule-title">
+            <div className="instructor-section-head">
+              <div><p className="instructor-eyebrow">COURSE DELIVERY</p><h2 id="instructor-schedule-title">Upcoming training deadlines</h2></div>
+              <span className="instructor-count">{upcomingModules.length} UPCOMING</span>
+            </div>
+            {upcomingModules.length ? (
+              <div className="instructor-schedule-list">
+                {upcomingModules.map((module) => (
+                  <article className="instructor-schedule-row" key={module.id}>
+                    <time>{formatDate(module.deadline)}</time>
+                    <div><strong>{module.title}</strong><span>{module.programYearSection || module.targetAudience || module.category}</span></div>
+                    <span className={`instructor-status ${getDeadlineTone(module.deadline) === 'soon' ? 'status-on-track' : 'status-active'}`}>{getDeadlineTone(module.deadline) === 'soon' ? 'Due soon' : 'Scheduled'}</span>
+                    <button className="instructor-button secondary" type="button" onClick={() => setModal({ mode: 'deadline', module })}>Edit deadline</button>
+                  </article>
+                ))}
+              </div>
+            ) : <p className="instructor-overview-empty">No active courses have upcoming deadlines.</p>}
+          </section>
+        )}
+
         </div>
       </div>
 
       <AnimatePresence>
         {modal && <ModuleModal key={`${modal.mode}-${modal.module?.id || 'new'}`} module={modal.module} mode={modal.mode} onClose={() => setModal(null)} onSave={saveModule} />}
       </AnimatePresence>
+      {quizBuilder && (
+        <InstructorQuizBuilder
+          key={quizBuilder.quizId || 'new'}
+          quizId={quizBuilder.quizId}
+          isModal
+          onClose={closeQuizBuilder}
+          onSaved={handleAssessmentSaved}
+        />
+      )}
       <AnimatePresence>
         {notice && <MotionDiv className="instructor-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} role="status">{notice}</MotionDiv>}
       </AnimatePresence>

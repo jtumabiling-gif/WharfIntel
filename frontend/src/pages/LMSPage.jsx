@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { getLmsAttachment, LEARNER_PROGRESS_PREFIX, loadInstructorModules, MODULES_STORAGE_KEY } from './lmsStore';
+import {
+  getLmsAttachment,
+  LEARNER_PROGRESS_PREFIX,
+  loadInstructorModules,
+  MODULES_STORAGE_KEY,
+  publishLmsNotification,
+} from './lmsStore';
 import {
   isAssessmentAvailable,
   loadQuizAttempts,
@@ -9,6 +16,10 @@ import {
   QUIZZES_STORAGE_KEY,
 } from './quizStore';
 import './LMSPage.css';
+import LMSWorkspaceSidebar from './LMSWorkspaceSidebar';
+import LMSNotificationCenter from './LMSNotificationCenter';
+import WorkspaceThemeToggle from './WorkspaceThemeToggle';
+import useWorkspaceTheme from './useWorkspaceTheme';
 
 const MotionDiv = motion.div;
 const MotionSection = motion.section;
@@ -167,9 +178,13 @@ const loadCourses = (storageKey, instructorModules = []) => {
 
       return {
         ...course,
+        faculty: module.faculty || course.faculty,
+        courseCode: module.courseCode || course.courseCode,
+        programYearSection: module.programYearSection || module.targetAudience || course.programYearSection,
+        courseUnits: module.courseUnits ?? course.courseUnits,
         title: module.title,
         category: module.displayCategory || module.category.toUpperCase(),
-        level: module.targetAudience,
+        level: course.level,
         description: module.description,
         accent: module.accent || categoryAccents[module.category] || course.accent,
         resourceUrl: module.resourceUrl,
@@ -194,7 +209,11 @@ const loadCourses = (storageKey, instructorModules = []) => {
           id: module.id,
           title: module.title,
           category: module.category.toUpperCase(),
-          level: module.targetAudience,
+          level: '',
+          faculty: module.faculty || '',
+          courseCode: module.courseCode || '',
+          programYearSection: module.programYearSection || module.targetAudience || '',
+          courseUnits: module.courseUnits ?? '',
           duration: `${sections.length * 30} min`,
           description: module.description,
           accent: categoryAccents[module.category] || 'cyan',
@@ -253,8 +272,14 @@ const CourseMark = ({ accent }) => (
 
 const LMSPage = () => {
   const reduceMotion = useReducedMotion();
+  const [isLightMode, toggleTheme] = useWorkspaceTheme();
+  const [searchParams, setSearchParams] = useSearchParams();
   const username = localStorage.getItem('username') || 'guest';
   const role = (localStorage.getItem('role') || '').toLowerCase();
+  const requestedSection = searchParams.get('view');
+  const activeSection = ['dashboard', 'tasks', 'courses', 'calendar', 'plans', 'news', 'templates'].includes(requestedSection)
+    ? requestedSection
+    : 'dashboard';
   const storageKey = `${LEARNER_PROGRESS_PREFIX}${username}`;
   const [instructorModules, setInstructorModules] = useState(() => loadInstructorModules());
   const [courses, setCourses] = useState(() => loadCourses(storageKey, instructorModules));
@@ -267,6 +292,7 @@ const LMSPage = () => {
   const [quizzes, setQuizzes] = useState([]);
   const [quizAttempts, setQuizAttempts] = useState({});
   const [assessmentError, setAssessmentError] = useState('');
+  const [activityError, setActivityError] = useState('');
   const selectedCourse = courses.find((course) => course.id === selectedCourseId);
 
   useEffect(() => {
@@ -372,6 +398,8 @@ const LMSPage = () => {
   });
 
   const toggleLesson = (courseId, lessonId) => {
+    const previousCourse = courses.find((course) => course.id === courseId);
+    const completedLesson = previousCourse?.lessons.find((lesson) => lesson.id === lessonId && !lesson.completed);
     const nextCourses = courses.map((course) => (
       course.id === courseId
         ? {
@@ -393,6 +421,34 @@ const LMSPage = () => {
       localStorage.setItem(storageKey, JSON.stringify(saved));
     } catch {
       // Keep the in-memory completion state if storage is unavailable.
+    }
+    if (completedLesson) {
+      const updatedCourse = nextCourses.find((course) => course.id === courseId);
+      const courseCompleted = updatedCourse.lessons.every((lesson) => lesson.completed);
+      const title = courseCompleted ? 'Course completed' : 'Lesson completed';
+      const message = courseCompleted
+        ? `${username} completed all lessons in ${updatedCourse.title}.`
+        : `${username} completed "${completedLesson.title}" in ${updatedCourse.title}.`;
+      try {
+        publishLmsNotification({
+          recipientRole: 'instructor',
+          courseId,
+          title,
+          message,
+          type: 'activity',
+        });
+        publishLmsNotification({
+          recipientRole: 'student',
+          recipientUsername: username,
+          courseId,
+          title: courseCompleted ? 'Course completed' : 'Lesson marked complete',
+          message: courseCompleted ? `You completed ${updatedCourse.title}.` : `You completed "${completedLesson.title}".`,
+          type: 'activity',
+        });
+        setActivityError('');
+      } catch (notificationError) {
+        setActivityError(`Progress was saved, but its notification could not be sent: ${notificationError.message || 'browser storage is unavailable'}.`);
+      }
     }
   };
 
@@ -440,21 +496,69 @@ const LMSPage = () => {
       && (attempts.some((attempt) => attempt.status === 'In Progress') || attempts.length < Number(quiz.maxAttempts));
   };
 
+  const taskItems = courses.flatMap((course) => course.lessons
+    .filter((lesson) => !lesson.completed)
+    .map((lesson) => ({
+      id: `${course.id}:${lesson.id}`,
+      title: lesson.title,
+      course,
+      kind: 'Lesson',
+      deadline: course.deadline || '',
+      action: () => setSelectedCourseId(course.id),
+    })));
+  const assignedAssessments = quizzes
+    .filter((quiz) => quiz.status === 'Published' && canTakeAssessment(quiz))
+    .map((quiz) => ({
+      id: quiz.id,
+      title: quiz.title,
+      course: courses.find((course) => course.id === quiz.courseId),
+      kind: 'Assessment',
+      deadline: quiz.availableUntil || '',
+      action: () => openExam(quiz),
+    }));
+  const allTaskItems = [...assignedAssessments, ...taskItems];
+  const calendarItems = instructorModules
+    .filter((module) => module.status === 'Active' && module.deadline && module.deadline >= new Date().toISOString().slice(0, 10))
+    .map((module) => ({
+      id: module.id,
+      title: module.title,
+      date: module.deadline,
+      type: 'Course deadline',
+    }))
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const navigateSection = (section) => {
+    setSearchParams(section === 'dashboard' ? {} : { view: section });
+    document.querySelector('.lms-content-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const cardMotion = reduceMotion
     ? { initial: false, animate: { opacity: 1, y: 0 } }
     : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 } };
 
   return (
-    <div className="lms-page">
+    <div className={`lms-page lms-workspace-layout ${isLightMode ? '' : 'theme-dark'}`}>
+      <LMSWorkspaceSidebar
+        activeSection={activeSection}
+        onNavigate={navigateSection}
+        taskCount={allTaskItems.length}
+        username={username}
+        role={role}
+      />
       <div className="lms-shell">
         <header className="lms-topbar">
           <div className="lms-topbar-actions">
-            <div className="lms-user-chip">
-              <span className="lms-online-dot" />
-              <span>{username === 'guest' ? 'Training profile' : username}</span>
+            <span className="lms-breadcrumb">Learning management <span>/</span> {activeSection === 'templates' ? 'Activity templates' : activeSection === 'tasks' ? 'My tasks' : activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}</span>
+            <div className="lms-user-actions">
+              <LMSNotificationCenter role={role} username={username} courses={courses} isDarkMode={!isLightMode} />
+              <WorkspaceThemeToggle isLightMode={isLightMode} onToggle={toggleTheme} />
+              <div className="lms-user-chip">
+                <span className="lms-online-dot" />
+                <span>{username === 'guest' ? 'Training profile' : username}</span>
+              </div>
             </div>
           </div>
         </header>
+        {activityError && <p className="lms-activity-error" role="alert">{activityError}</p>}
 
         <div className="lms-content-scroll">
         <MotionSection
@@ -465,17 +569,17 @@ const LMSPage = () => {
         >
           <div>
             <p className="lms-eyebrow"><span /> CREW DEVELOPMENT / TRAINING DECK</p>
-            <h1>Learning Center</h1>
-            <p className="lms-intro">Build the skills that keep port operations moving safely.</p>
+            <h1>{activeSection === 'dashboard' ? 'Dashboard' : activeSection === 'tasks' ? 'My tasks' : activeSection === 'courses' ? 'Courses' : activeSection === 'calendar' ? 'Calendar' : activeSection === 'plans' ? 'Training plans' : activeSection === 'news' ? 'Learning updates' : 'Activity templates'}</h1>
+            <p className="lms-intro">{activeSection === 'dashboard' ? 'Your training progress, assignments, and upcoming deadlines.' : activeSection === 'tasks' ? 'Keep track of your unfinished modules and available assessments.' : activeSection === 'courses' ? 'Explore your maritime training courses and continue learning.' : activeSection === 'calendar' ? 'Upcoming training deadlines from your active courses.' : activeSection === 'plans' ? 'Review your courses and the progress you have made in each.' : activeSection === 'news' ? 'Updates from your published training and assessments.' : 'Browse the lesson activities available in your course modules.'}</p>
           </div>
-          <div className="lms-readiness">
+          {activeSection !== 'tasks' && activeSection !== 'news' && activeSection !== 'templates' && <div className="lms-readiness">
             <span className="lms-readiness-label">FLEET READINESS</span>
             <strong>{readinessPercent}%</strong>
             <span className="lms-readiness-track"><span style={{ width: `${readinessPercent}%` }} /></span>
-          </div>
+          </div>}
         </MotionSection>
 
-        <section className="lms-stats" aria-label="Training summary">
+        {activeSection === 'dashboard' && <section className="lms-stats" aria-label="Training summary">
           <MotionArticle className="lms-stat-card" {...cardMotion} transition={{ delay: 0.04, duration: 0.3 }}>
             <span className="lms-stat-icon courses"><StatIcon type="courses" /></span>
             <div><span className="lms-stat-label">Enrolled Courses</span><strong>{courses.length}</strong><small>Available in your track</small></div>
@@ -488,9 +592,99 @@ const LMSPage = () => {
             <span className="lms-stat-icon certificates"><StatIcon type="certificates" /></span>
             <div><span className="lms-stat-label">Active Certifications</span><strong>{CERTIFICATIONS.length}</strong><small>Credentials in good standing</small></div>
           </MotionArticle>
-        </section>
+        </section>}
 
-        <section className="lms-courses-section" aria-labelledby="lms-courses-title">
+        {(activeSection === 'dashboard' || activeSection === 'tasks') && (
+          <section className={`lms-workspace-overview ${activeSection === 'tasks' ? 'tasks-view' : ''}`} aria-label={activeSection === 'tasks' ? 'My tasks' : 'Training overview'}>
+            <div className="lms-workspace-main-panel">
+              <div className="lms-panel-heading">
+                <div><p className="lms-eyebrow">ASSIGNED TRAINING</p><h2>{activeSection === 'tasks' ? 'All tasks' : 'My tasks'}</h2></div>
+                <span className="lms-panel-count">{allTaskItems.length} OPEN</span>
+              </div>
+              {allTaskItems.length ? (
+                <div className="lms-task-list">
+                  {allTaskItems.slice(0, activeSection === 'tasks' ? undefined : 6).map((task) => (
+                    <article className="lms-task-row" key={task.id}>
+                      <span className={`lms-task-type ${task.kind === 'Assessment' ? 'is-assessment' : ''}`}>{task.kind === 'Assessment' ? 'Q' : 'L'}</span>
+                      <div className="lms-task-copy"><strong>{task.title}</strong><span>{task.course?.title || 'Training activity'}</span></div>
+                      <span className="lms-task-due">{task.deadline ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${task.deadline}T00:00:00`)) : 'In progress'}</span>
+                      <button type="button" onClick={task.action}>{task.kind === 'Assessment' ? 'Open' : 'Continue'} <span aria-hidden="true">›</span></button>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="lms-panel-empty">You’re all caught up. No open lessons or assessments.</p>}
+              {activeSection === 'dashboard' && allTaskItems.length > 6 && <button className="lms-view-all" type="button" onClick={() => navigateSection('tasks')}>View all tasks <span aria-hidden="true">›</span></button>}
+            </div>
+            {activeSection === 'dashboard' && (
+              <aside className="lms-agenda-panel">
+                <div className="lms-panel-heading"><div><p className="lms-eyebrow">YOUR SCHEDULE</p><h2>Upcoming</h2></div></div>
+                {calendarItems.length ? (
+                  <div className="lms-agenda-list">
+                    {calendarItems.slice(0, 5).map((item) => (
+                      <article className="lms-agenda-item" key={item.id}>
+                        <span className="lms-agenda-date">{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${item.date}T00:00:00`))}</span>
+                        <div><strong>{item.title}</strong><span>{item.type}</span></div>
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="lms-panel-empty">No course deadlines are scheduled.</p>}
+                <button className="lms-view-all" type="button" onClick={() => navigateSection('calendar')}>View calendar <span aria-hidden="true">›</span></button>
+              </aside>
+            )}
+          </section>
+        )}
+
+        {activeSection === 'calendar' && (
+          <section className="lms-workspace-main-panel lms-detail-panel">
+            <div className="lms-panel-heading"><div><p className="lms-eyebrow">COURSE SCHEDULE</p><h2>Upcoming deadlines</h2></div><span className="lms-panel-count">{calendarItems.length} DATES</span></div>
+            <div className="lms-calendar-list">
+              {calendarItems.map((item) => (
+                <article className="lms-calendar-row" key={item.id}>
+                  <span className="lms-calendar-date">{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(`${item.date}T00:00:00`))}</span>
+                  <div><strong>{item.title}</strong><span>{item.type}</span></div>
+                </article>
+              ))}
+              {!calendarItems.length && <p className="lms-panel-empty">There are no upcoming deadlines in your active courses.</p>}
+            </div>
+          </section>
+        )}
+
+        {activeSection === 'news' && (
+          <section className="lms-workspace-main-panel lms-detail-panel">
+            <div className="lms-panel-heading"><div><p className="lms-eyebrow">LEARNING UPDATES</p><h2>Published training</h2></div><span className="lms-panel-count">{courses.length} COURSES</span></div>
+            <div className="lms-news-list">
+              {courses.map((course) => (
+                <article className="lms-news-row" key={course.id}>
+                  <span className="lms-news-mark"><CourseMark accent={course.accent} /></span>
+                  <div><strong>{course.title}</strong><span>{course.description}</span></div>
+                  <button type="button" onClick={() => navigateSection('courses')}>View course <span aria-hidden="true">›</span></button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {(activeSection === 'plans' || activeSection === 'templates') && (
+          <section className="lms-workspace-main-panel lms-detail-panel">
+            <div className="lms-panel-heading"><div><p className="lms-eyebrow">{activeSection === 'plans' ? 'YOUR ASSIGNED PATH' : 'LESSON LIBRARY'}</p><h2>{activeSection === 'plans' ? 'Course progress' : 'Activities by course'}</h2></div><span className="lms-panel-count">{courses.length} COURSES</span></div>
+            <div className="lms-plan-list">
+              {courses.map((course) => {
+                const progress = getDisplayedCourseProgress(course);
+                return (
+                  <article className="lms-plan-row" key={course.id}>
+                    <div className={`lms-plan-mark lms-accent-${course.accent}`}><CourseMark accent={course.accent} /></div>
+                    <div className="lms-plan-copy"><strong>{course.title}</strong><span>{activeSection === 'plans' ? `${progress.completed} of ${progress.total} modules complete` : `${course.lessons.length} lesson activities · ${course.duration}`}</span></div>
+                    <span className="lms-mini-progress"><i style={{ width: `${progress.percent}%` }} /></span>
+                    <strong className="lms-plan-percent">{progress.percent}%</strong>
+                    <button type="button" onClick={() => setSelectedCourseId(course.id)}>{activeSection === 'plans' ? 'Open plan' : 'Browse'} <span aria-hidden="true">›</span></button>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {activeSection === 'courses' && <section className="lms-courses-section" aria-labelledby="lms-courses-title">
           <div className="lms-section-heading">
             <div>
               <p className="lms-eyebrow">YOUR TRAINING PLAN</p>
@@ -527,9 +721,15 @@ const LMSPage = () => {
                       <CourseMark accent={course.accent} />
                       <span className={`lms-status lms-status-${status.toLowerCase().replace(' ', '-')}`}>{status}</span>
                     </div>
-                    <div className="lms-course-meta"><span>{course.category}</span><span>{course.level}</span></div>
+                    <div className="lms-course-meta"><span>{course.category}</span>{course.level && <span>{course.level}</span>}</div>
                     <h3>{course.title}</h3>
                     <p className="lms-course-description">{course.description}</p>
+                    <dl className="lms-course-details">
+                      <div><dt>Faculty:</dt><dd>{course.faculty || 'Not assigned'}</dd></div>
+                      <div><dt>Course Code:</dt><dd>{course.courseCode || 'Not assigned'}</dd></div>
+                      <div><dt>Program/Year/Section:</dt><dd>{course.programYearSection || course.level || 'Not assigned'}</dd></div>
+                      <div><dt>Course Units:</dt><dd>{course.courseUnits ?? 'Not set'}</dd></div>
+                    </dl>
                     <div className="lms-course-progress-label">
                       <span>{progress.completed} / {progress.total} modules</span>
                       <strong>{progress.percent}%</strong>
@@ -546,9 +746,9 @@ const LMSPage = () => {
               })}
             {filteredCourses.length === 0 && <p className="lms-empty-state">No courses match that search. Try a different title or filter.</p>}
           </div>
-        </section>
+        </section>}
 
-        <section className="lms-certifications" aria-labelledby="lms-certifications-title">
+        {['dashboard', 'courses'].includes(activeSection) && <section className="lms-certifications" aria-labelledby="lms-certifications-title">
           <div className="lms-cert-heading">
             <div><p className="lms-eyebrow">QUALIFICATIONS</p><h2 id="lms-certifications-title">Active certifications</h2></div>
             <span className="lms-cert-count">{CERTIFICATIONS.length} VALID</span>
@@ -562,7 +762,7 @@ const LMSPage = () => {
               </MotionArticle>
             ))}
           </div>
-        </section>
+        </section>}
 
         </div>
 
@@ -589,7 +789,9 @@ const LMSPage = () => {
                             <span className="lms-lesson-check" aria-hidden="true">{lesson.completed ? '✓' : String(index + 1).padStart(2, '0')}</span>
                             <span className="lms-lesson-title"><strong>{lesson.title}</strong><small>{isExpanded ? 'Hide lesson details' : 'View lesson details'}</small></span>
                             <span className="lms-lesson-duration">{lesson.duration}</span>
-                            <span className={`lms-lesson-chevron ${isExpanded ? 'is-expanded' : ''}`} aria-hidden="true">⌄</span>
+                            <span className={`lms-lesson-chevron ${isExpanded ? 'is-expanded' : ''}`} aria-hidden="true">
+                              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m4 6 4 4 4-4" /></svg>
+                            </span>
                           </button>
                           <label className="lms-lesson-completion">
                             <input type="checkbox" checked={Boolean(lesson.completed)} onChange={() => toggleLesson(selectedCourse.id, lessonId)} />

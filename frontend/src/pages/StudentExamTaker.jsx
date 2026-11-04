@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LEARNER_PROGRESS_PREFIX } from './lmsStore';
+import { LEARNER_PROGRESS_PREFIX, publishLmsNotification } from './lmsStore';
 import {
   isAssessmentAvailable,
   loadQuizAttempts,
@@ -106,6 +106,26 @@ const StudentExamTaker = () => {
       const learnerAttempts = storedAttempts[username] || [];
       const updatedAttempts = learnerAttempts.map((item) => item.id === completedAttempt.id ? completedAttempt : item);
       saveQuizAttempts({ ...storedAttempts, [username]: updatedAttempts });
+      let notificationWarning = '';
+      try {
+        publishLmsNotification({
+          recipientRole: 'instructor',
+          ...(quiz.courseId ? { courseId: quiz.courseId } : {}),
+          title: 'Assessment submitted',
+          message: `${username} submitted "${quiz.title}" for review.`,
+          type: 'submission',
+        });
+        publishLmsNotification({
+          recipientRole: 'student',
+          recipientUsername: username,
+          ...(quiz.courseId ? { courseId: quiz.courseId } : {}),
+          title: 'Assessment submitted',
+          message: `Your answers for "${quiz.title}" were submitted for review.`,
+          type: 'submission',
+        });
+      } catch (notificationError) {
+        notificationWarning = `Your submission was received, but a notification could not be sent: ${notificationError.message || 'browser storage is unavailable'}.`;
+      }
       if (quiz.courseId) {
         try {
           const progressKey = `${LEARNER_PROGRESS_PREFIX}${username}`;
@@ -121,9 +141,10 @@ const StudentExamTaker = () => {
             __lastActivity: completedAttempt.submittedAt,
           }));
         } catch (progressError) {
-          setSubmissionError(`Your submission was received, but course progress could not be updated: ${progressError.message || 'browser storage is unavailable'}.`);
+          notificationWarning += `${notificationWarning ? ' ' : ''}Course progress could not be updated: ${progressError.message || 'browser storage is unavailable'}.`;
         }
       }
+      if (notificationWarning) setSubmissionError(notificationWarning);
       attemptRef.current = completedAttempt;
       setAttempt(completedAttempt);
       setShowConfirmation(false);
