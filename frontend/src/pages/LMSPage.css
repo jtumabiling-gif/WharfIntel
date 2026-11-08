@@ -244,8 +244,9 @@
 .lms-lesson-chevron { width: 18px; height: 18px; flex: 0 0 18px; display: grid; place-items: center; color: var(--lms-faint); transition: transform 140ms ease; }
 .lms-lesson-chevron svg { display: block; width: 14px; height: 14px; }
 .lms-lesson-chevron.is-expanded { transform: rotate(180deg); }
-.lms-lesson-completion { display: inline-flex !important; align-items: center; gap: 6px; margin: 0 !important; color: var(--lms-muted) !important; font-size: 9px !important; text-transform: none !important; white-space: nowrap; cursor: pointer; }
-.lms-lesson-completion input { width: 14px; height: 14px; margin: 0; accent-color: #5bd3a2; }
+.lms-lesson-completion { display: inline-flex !important; align-items: center; gap: 6px; margin: 0 !important; color: var(--lms-muted) !important; font-size: 9px !important; text-transform: none !important; white-space: nowrap; pointer-events: none; user-select: none; }
+.lms-lesson-completion-mark { width: 14px; height: 14px; display: grid; place-items: center; border: 1px solid rgba(154, 186, 202, 0.38); border-radius: 2px; color: transparent; font-size: 11px; line-height: 1; }
+.lms-lesson-completion-mark.is-complete { border-color: #5bd3a2; color: #0f172a; background: #5bd3a2; }
 .lms-lesson-details { margin: 0 3px 10px 43px; padding: 10px 12px; border-left: 2px solid rgba(77,216,232,.45); background: rgba(255,255,255,.025); }
 .lms-lesson-details p { margin: 0 0 9px; color: var(--lms-muted); font-size: 11px; line-height: 1.5; }
 .lms-lesson-resource { display: inline-flex; align-items: center; gap: 6px; color: #80e4eb; font-size: 10px; font-weight: 600; text-decoration: none; }

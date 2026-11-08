@@ -18,6 +18,30 @@ const getAttempts = () => Object.entries(loadQuizAttempts()).flatMap(([studentNa
   Array.isArray(attempts) ? attempts.map((attempt) => ({ ...attempt, studentName })) : []
 ));
 
+const getInstructorUsernames = () => {
+  const usernames = new Set();
+  const currentUsername = localStorage.getItem('username');
+  const currentRole = String(localStorage.getItem('role') || '').toLowerCase();
+  if (currentUsername && ['admin', 'instructor'].includes(currentRole)) {
+    usernames.add(currentUsername.toLowerCase());
+  }
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(LEARNER_PROGRESS_PREFIX)) continue;
+    try {
+      const progress = JSON.parse(localStorage.getItem(key) || '{}');
+      if (['admin', 'instructor'].includes(String(progress.__role || '').toLowerCase())) {
+        usernames.add(key.slice(LEARNER_PROGRESS_PREFIX.length).toLowerCase());
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return usernames;
+};
+
 const GradingWorkspace = ({ submission, quiz, onClose, onFinalize }) => {
   const manualQuestions = quiz.questions.filter(isManualQuestion);
   const [grades, setGrades] = useState(() => Object.fromEntries(manualQuestions.map((question) => [
@@ -250,8 +274,13 @@ export const SubmissionChecking = ({ modules, quizzes, onNotice }) => {
 };
 
 const buildStudentDirectory = (modules, quizzes) => {
-  const learners = loadLearnerProgress(modules);
-  const attempts = getAttempts();
+  const instructorUsernames = getInstructorUsernames();
+  const learners = loadLearnerProgress(modules).filter(
+    (learner) => !instructorUsernames.has(learner.studentName.toLowerCase()),
+  );
+  const attempts = getAttempts().filter(
+    (attempt) => !instructorUsernames.has(attempt.studentName.toLowerCase()),
+  );
   const students = new Map();
   learners.forEach((learner) => {
     if (!students.has(learner.studentName)) students.set(learner.studentName, { username: learner.studentName, courses: [], attempts: [] });

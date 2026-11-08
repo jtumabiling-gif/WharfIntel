@@ -44,6 +44,15 @@ const WorkspaceIcon = ({ name }) => (
 
 const LMSWorkspaceSidebar = ({ activeSection, onNavigate, taskCount, username, role }) => {
   const navigate = useNavigate();
+  const returnToCommandCenter = () => {
+    const dashboardWindow = window.opener;
+    if (dashboardWindow && !dashboardWindow.closed) {
+      dashboardWindow.focus();
+      window.close();
+      if (window.closed) return;
+    }
+    navigate('/dashboard');
+  };
   const initials = username && username !== 'guest'
     ? username.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
     : 'WI';
@@ -79,7 +88,7 @@ const LMSWorkspaceSidebar = ({ activeSection, onNavigate, taskCount, username, r
           <span className="lms-profile-avatar">{initials}</span>
           <span><strong>{username === 'guest' ? 'Guest learner' : username}</strong><small>{role === 'instructor' || role === 'admin' ? 'Instructor account' : 'Learner account'}</small></span>
         </div>
-        <button className="lms-command-center-link" type="button" onClick={() => navigate('/dashboard')}>
+        <button className="lms-command-center-link" type="button" onClick={returnToCommandCenter}>
           <WorkspaceIcon name="command" />
           <span>Command center</span>
         </button>

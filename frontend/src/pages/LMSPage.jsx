@@ -235,15 +235,20 @@ const loadCourses = (storageKey, instructorModules = []) => {
       .filter((course) => !enrolledCourseIds || enrolledCourseIds.has(course.id))
       .map((course) => ({
       ...course,
-      lessons: course.lessons.map((lesson, index) => ({
+      lessons: course.lessons.map((lesson) => ({
         ...lesson,
-        completed: Array.isArray(saved[course.id])
-          ? saved[course.id][index] ?? lesson.completed
-          : saved[course.id]?.[lesson.id] ?? lesson.completed,
+        completed: Boolean(saved.__downloadedLessons?.[course.id]?.[lesson.id]),
       })),
     }));
   } catch {
-    return COURSE_CATALOG;
+    return COURSE_CATALOG.map((course) => ({
+      ...course,
+      lessons: course.lessons.map((lesson, index) => ({
+        ...lesson,
+        id: lesson.id || `${course.id}-section-${index + 1}`,
+        completed: false,
+      })),
+    }));
   }
 };
 
@@ -397,38 +402,41 @@ const LMSPage = () => {
     return matchesFilter && matchesSearch;
   });
 
-  const toggleLesson = (courseId, lessonId) => {
-    const previousCourse = courses.find((course) => course.id === courseId);
-    const completedLesson = previousCourse?.lessons.find((lesson) => lesson.id === lessonId && !lesson.completed);
-    const nextCourses = courses.map((course) => (
-      course.id === courseId
-        ? {
-          ...course,
-          lessons: course.lessons.map((lesson, index) => {
-            const id = lesson.id || `${course.id}-section-${index + 1}`;
-            return id === lessonId ? { ...lesson, id, completed: !lesson.completed } : { ...lesson, id };
-          }),
-        }
-        : course
+  const markLessonDownloaded = (courseId, lessonId) => {
+    const course = courses.find((item) => item.id === courseId);
+    const lesson = course?.lessons.find((item) => item.id === lessonId);
+    if (!course || !lesson) return;
+
+    const updatedLessons = course.lessons.map((item) => (
+      item.id === lessonId ? { ...item, completed: true } : item
+    ));
+    const nextCourses = courses.map((item) => (
+      item.id === courseId
+        ? { ...item, lessons: updatedLessons }
+        : item
     ));
     setCourses(nextCourses);
 
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-      const updatedCourse = nextCourses.find((course) => course.id === courseId);
-      saved[courseId] = Object.fromEntries(updatedCourse.lessons.map((lesson) => [lesson.id, lesson.completed]));
+      const downloadedLessons = saved.__downloadedLessons || {};
+      saved.__downloadedLessons = {
+        ...downloadedLessons,
+        [courseId]: { ...downloadedLessons[courseId], [lessonId]: true },
+      };
+      saved[courseId] = Object.fromEntries(updatedLessons.map((item) => [item.id, item.completed]));
       saved.__lastActivity = new Date().toISOString();
       localStorage.setItem(storageKey, JSON.stringify(saved));
     } catch {
-      // Keep the in-memory completion state if storage is unavailable.
+      setAttachmentError('The file downloaded, but this browser could not save your lesson progress.');
     }
-    if (completedLesson) {
-      const updatedCourse = nextCourses.find((course) => course.id === courseId);
-      const courseCompleted = updatedCourse.lessons.every((lesson) => lesson.completed);
+
+    if (!lesson.completed) {
+      const courseCompleted = updatedLessons.every((item) => item.completed);
       const title = courseCompleted ? 'Course completed' : 'Lesson completed';
       const message = courseCompleted
-        ? `${username} completed all lessons in ${updatedCourse.title}.`
-        : `${username} completed "${completedLesson.title}" in ${updatedCourse.title}.`;
+        ? `${username} completed all lessons in ${course.title}.`
+        : `${username} completed "${lesson.title}" in ${course.title}.`;
       try {
         publishLmsNotification({
           recipientRole: 'instructor',
@@ -442,7 +450,7 @@ const LMSPage = () => {
           recipientUsername: username,
           courseId,
           title: courseCompleted ? 'Course completed' : 'Lesson marked complete',
-          message: courseCompleted ? `You completed ${updatedCourse.title}.` : `You completed "${completedLesson.title}".`,
+          message: courseCompleted ? `You completed ${course.title}.` : `You completed "${lesson.title}".`,
           type: 'activity',
         });
         setActivityError('');
@@ -452,7 +460,7 @@ const LMSPage = () => {
     }
   };
 
-  const downloadAttachment = async (attachment) => {
+  const downloadAttachment = async (attachment, courseId, lessonId) => {
     setAttachmentError('');
     try {
       const file = await getLmsAttachment(attachment.id);
@@ -461,16 +469,21 @@ const LMSPage = () => {
       const link = document.createElement('a');
       link.href = objectUrl;
       link.download = attachment.name;
-      link.target = '_blank';
-      link.rel = 'noreferrer';
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      markLessonDownloaded(courseId, lessonId);
     } catch (error) {
       setAttachmentError(error.message || 'Could not open this attachment.');
     }
   };
+
+  /*
+   * Keep lesson completion controlled by successful attachment downloads.
+   * A browser does not expose a reliable signal for when a download finishes;
+   * the lesson is marked when its attachment is handed to the browser.
+   */
 
   const openExam = (quiz) => {
     window.open(`/lms/exam/${encodeURIComponent(quiz.id)}`, '_blank', 'noopener,noreferrer');
@@ -793,10 +806,12 @@ const LMSPage = () => {
                               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m4 6 4 4 4-4" /></svg>
                             </span>
                           </button>
-                          <label className="lms-lesson-completion">
-                            <input type="checkbox" checked={Boolean(lesson.completed)} onChange={() => toggleLesson(selectedCourse.id, lessonId)} />
+                          <div className="lms-lesson-completion" role="status" aria-label={`${lesson.title}: ${lesson.completed ? 'done' : 'not done'}`}>
+                            <span className={`lms-lesson-completion-mark ${lesson.completed ? 'is-complete' : ''}`} aria-hidden="true">
+                              {lesson.completed ? '✓' : ''}
+                            </span>
                             <span>{lesson.completed ? 'Done' : 'Complete'}</span>
-                          </label>
+                          </div>
                         </div>
                         {isExpanded && (
                           <div className="lms-lesson-details" id={`lesson-details-${lessonId}`}>
@@ -807,7 +822,7 @@ const LMSPage = () => {
                                 Open lesson resource
                               </a>
                             ) : lesson.attachment ? (
-                              <button className="lms-lesson-resource lms-file-download" type="button" onClick={() => downloadAttachment(lesson.attachment)}>
+                              <button className="lms-lesson-resource lms-file-download" type="button" onClick={() => downloadAttachment(lesson.attachment, selectedCourse.id, lessonId)}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4" /><path d="M5 17v3h14v-3" /></svg>
                                 <span className="lms-file-download-label">Download</span>
                                 <span className="lms-file-download-name" title={lesson.attachment.name}>{lesson.attachment.name}</span>

@@ -355,7 +355,7 @@ const CustomTooltip = ({ active, payload, label }) => {
               <button className={!isLmsRoute && activeMenu === 'analytics' ? 'active' : ''} onClick={() => { setActiveMenu('analytics'); navigate('/dashboard'); }}>
                 <PieChartIcon /> <span className="nav-text">Analytics</span>
               </button>
-              <button className={`lms-nav-btn ${isLmsRoute ? 'active' : ''}`} type="button" onClick={() => window.open(new URL('/lms', window.location.origin).href, '_blank', 'noopener,noreferrer')} aria-label="Open learning management system in a new tab" title="Open LMS in a new tab">
+              <button className={`lms-nav-btn ${isLmsRoute ? 'active' : ''}`} type="button" onClick={() => window.open(new URL('/lms', window.location.origin).href, '_blank')} aria-label="Open learning management system in a new tab" title="Open LMS in a new tab">
                 <LearningIcon /> <span className="nav-text">LMS</span>
               </button>
             </nav>

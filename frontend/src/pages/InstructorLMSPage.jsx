@@ -13,6 +13,7 @@ import { isAwaitingInstructorReview, loadQuizAttempts, loadQuizzes, QUIZZES_STOR
 import { StudentManagement, SubmissionChecking } from './InstructorManagementViews';
 import InstructorQuizBuilder from './InstructorQuizBuilder';
 import InstructorWorkspaceSidebar from './InstructorWorkspaceSidebar';
+import LMSNotificationCenter from './LMSNotificationCenter';
 import WorkspaceThemeToggle from './WorkspaceThemeToggle';
 import useWorkspaceTheme from './useWorkspaceTheme';
 import './InstructorLMSPage.css';
@@ -517,6 +518,12 @@ const InstructorLMSPage = () => {
         <header className="instructor-topbar">
           <span className="instructor-breadcrumb">INSTRUCTOR WORKSPACE <span>/</span> {instructorNavSection.replace('students', 'LEARNERS').replace('submissions', 'SUBMISSION REVIEW').replace('assessments', 'ASSESSMENTS').replace('schedule', 'TRAINING SCHEDULE').replace('courses', 'COURSE MANAGEMENT').replace('overview', 'DASHBOARD').toUpperCase()}</span>
           <div className="instructor-topbar-actions">
+            <LMSNotificationCenter
+              role={role}
+              username={username}
+              courses={modules}
+              isDarkMode={!isLightMode}
+            />
             <WorkspaceThemeToggle isLightMode={isLightMode} onToggle={toggleTheme} />
             <span className="instructor-topbar-user"><i /> {username}</span>
           </div>
