@@ -5,9 +5,9 @@ const THEME_STORAGE_KEY = 'workspace-theme';
 const useWorkspaceTheme = () => {
   const [isLightMode, setIsLightMode] = useState(() => {
     try {
-      return localStorage.getItem(THEME_STORAGE_KEY) !== 'dark';
+      return localStorage.getItem(THEME_STORAGE_KEY) === 'light';
     } catch {
-      return true;
+      return false;
     }
   });
 

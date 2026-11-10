@@ -11,6 +11,7 @@ const VesselHelm3D = ({
   onSwitchToQuiz
 }) => {
   const mountRef = useRef(null);
+  const telemetryRef = useRef({ startedAt: null, maxHeelAngle: 0, collisions: 0 });
 
   // --- HUD & TELEMETRY STATE ---
   const [hud, setHud] = useState({
@@ -382,6 +383,7 @@ const VesselHelm3D = ({
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
+      if (telemetryRef.current.startedAt === null) telemetryRef.current.startedAt = performance.now();
       const dt = Math.min(clock.getDelta(), 0.05);
       const elapsed = clock.getElapsedTime();
       const s = simRef.current;
@@ -436,6 +438,10 @@ const VesselHelm3D = ({
 
         s.rollVelocity += rollAccel * dt;
         s.rollAngle += s.rollVelocity * dt * 12;
+        telemetryRef.current.maxHeelAngle = Math.max(
+          telemetryRef.current.maxHeelAngle,
+          Math.abs(s.rollAngle)
+        );
 
         // 4. CHECK FOR CAPSIZE (TOPPLE OVER AT 42+ DEGREES)
         if (Math.abs(s.rollAngle) >= CAPSIZE_DEG) {
@@ -507,6 +513,7 @@ const VesselHelm3D = ({
 
             if (dist < obs.radius + 3.2) {
               obs.hit = true;
+              telemetryRef.current.collisions += 1;
               const dmg = obs.type === 'STEAMER' ? 35 : 25;
               s.health = Math.max(0, s.health - dmg);
               // Collision violently knocks the ship sideways (can cause capsize!)
@@ -921,7 +928,12 @@ const VesselHelm3D = ({
               onClick={() =>
                 onComplete({
                   success: hud.status === 'CLEARED',
-                  finalHealth: hud.status === 'CLEARED' ? hud.health : 0
+                  finalHealth: hud.status === 'CLEARED' ? hud.health : 0,
+                  timeSeconds: telemetryRef.current.startedAt === null
+                    ? 0
+                    : (performance.now() - telemetryRef.current.startedAt) / 1000,
+                  maxHeelAngle: telemetryRef.current.maxHeelAngle,
+                  collisions: telemetryRef.current.collisions
                 })
               }
               style={{

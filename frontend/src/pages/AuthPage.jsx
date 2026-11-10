@@ -73,6 +73,7 @@ const AuthPage = ({ initialMode, onClose }) => {
               : "ACCESS DENIED: This account does not have instructor access.");
             localStorage.removeItem('username');
             localStorage.removeItem('role');
+            localStorage.removeItem('access_token');
             return;
           }
 
@@ -81,10 +82,11 @@ const AuthPage = ({ initialMode, onClose }) => {
           
           localStorage.setItem('username', data.user || username); // Fallback to state if data.user is missing
           localStorage.setItem('role', data.role); // 🔥 Save role for Admin.jsx to check
+          localStorage.setItem('access_token', data.access_token);
           const destination = data.role === 'admin'
             ? '/admin'
             : data.role === 'instructor'
-              ? '/lms/instructor'
+              ? '/instructor'
               : '/dashboard';
           navigate(destination, { replace: true });
 
@@ -107,7 +109,8 @@ const AuthPage = ({ initialMode, onClose }) => {
           setMessage("Instructor account created. Opening your dashboard...");
           localStorage.setItem('username', loginData.user || username);
           localStorage.setItem('role', loginData.role);
-          navigate('/lms/instructor', { replace: true });
+          localStorage.setItem('access_token', loginData.access_token);
+          navigate('/instructor', { replace: true });
           setUsername(""); setPassword(""); setConfirmPassword(""); setInstructorInviteCode("");
         } else {
           setIsSuccess(true);
@@ -123,6 +126,7 @@ const AuthPage = ({ initialMode, onClose }) => {
         setMessage(data.detail || "Authentication failed.");
       }
     } catch (err) {
+      console.error('Authentication request failed:', err);
       setIsSuccess(false);
       setMessage("Connection to backend failed.");
     }

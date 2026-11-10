@@ -1,13 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
-import LMSPage from './pages/LMSPage';
-import InstructorLMSPage from './pages/InstructorLMSPage';
+import InstructorDashboard from './pages/InstructorDashboard';
 import Simulation from './pages/Simulation';
-import Admin from './pages/Admin'; // 🔥 Import the Admin component
-import InstructorQuizBuilder from './pages/InstructorQuizBuilder';
-import StudentExamTaker from './pages/StudentExamTaker';
+import Admin from './pages/Admin';
 
 function App() {
   return (
@@ -17,13 +14,12 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route element={<Dashboard />}>
             <Route path="/dashboard" element={<></>} />
-            <Route path="/lms" element={<LMSPage />} />
-            <Route path="/lms/instructor" element={<InstructorLMSPage />} />
+            <Route path="/instructor" element={<InstructorDashboard />} />
+            <Route path="/lms" element={<Navigate to="/" replace />} />
+            <Route path="/lms/instructor" element={<Navigate to="/instructor" replace />} />
           </Route>
           <Route path="/simulation" element={<Simulation />} />
-          <Route path="/admin" element={<Admin />} /> {/* 🔥 Add the Admin route */}
-          <Route path="/lms/instructor/quiz-builder" element={<InstructorQuizBuilder />} />
-          <Route path="/lms/exam/:examId" element={<StudentExamTaker />} />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </div>
     </Router>

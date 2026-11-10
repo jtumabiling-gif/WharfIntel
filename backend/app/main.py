@@ -2,7 +2,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import asyncio
 import hashlib
@@ -14,6 +14,8 @@ import math
 import os
 import secrets
 import joblib
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.cluster import DBSCAN # 🔥 STRIKE 1: Import DBSCAN
@@ -21,7 +23,7 @@ from datetime import datetime, timedelta
 from . import models, database, pathfinder
 from .database import engine, get_db, Base
 from .models import User, Shipment
-from .auth import get_password_hash, verify_password
+from .auth import SECRET_PEPPER, get_password_hash, verify_password
 # 🔥 NEW: Added WebSocket, WebSocketDisconnect, and BackgroundTasks
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,6 +63,11 @@ DESTINATION_PRICING = {
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="WharfIntel Command Center API")
+session_serializer = URLSafeTimedSerializer(
+    os.getenv("WHARF_SESSION_SECRET") or SECRET_PEPPER,
+    salt="wharfintel-session-v1",
+)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # ==========================================
 # 🔥 GLOBAL MULTIPLAYER WEBSOCKET ENGINE
@@ -172,6 +179,27 @@ class PasswordUpdate(BaseModel):
 class AccountDelete(BaseModel):
     password: str
 
+class ScenarioCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    weather: str
+    fog_density: int = Field(ge=0, le=100)
+    time_of_day: str
+    traffic_density: int = Field(ge=0, le=50)
+    hazard_x: float
+    hazard_z: float
+    time_limit_minutes: int = Field(ge=1, le=60)
+    minimum_hull_health: int = Field(ge=1, le=100)
+    max_breakwater_speed: float = Field(ge=1, le=20)
+
+class AssessmentCreate(BaseModel):
+    scenario_name: str = Field(min_length=2, max_length=160)
+    success: bool
+    final_health: float = Field(ge=0, le=100)
+    time_seconds: float = Field(ge=0)
+    max_docking_speed: float = Field(default=0, ge=0, le=100)
+    max_heel_angle: float = Field(ge=0, le=180)
+    collisions: int = Field(ge=0)
+
 # --- ADMIN SCHEMAS ---
 class AdminUserCreate(BaseModel):
     username: str
@@ -266,8 +294,160 @@ def login(user: UserAuth, db: Session = Depends(get_db)):
     return {
         "message": "Login successful", 
         "user": db_user.username,
-        "role": user_role
+        "role": user_role,
+        "access_token": session_serializer.dumps({"user_id": db_user.id, "role": user_role}),
+        "token_type": "bearer",
     }
+
+def get_session_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        payload = session_serializer.loads(credentials.credentials, max_age=43200)
+    except SignatureExpired as exc:
+        raise HTTPException(status_code=401, detail="Session expired; please sign in again") from exc
+    except BadSignature as exc:
+        raise HTTPException(status_code=401, detail="Invalid session") from exc
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    if not user or getattr(user, "role", "commander") != payload.get("role"):
+        raise HTTPException(status_code=401, detail="Session is no longer valid")
+    return user
+
+def require_instructor(user: User = Depends(get_session_user)):
+    if getattr(user, "role", "commander") not in ("instructor", "admin"):
+        raise HTTPException(status_code=403, detail="Instructor access required")
+    return user
+
+@app.get("/api/instructor/dashboard")
+def instructor_dashboard(
+    db: Session = Depends(get_db),
+    instructor: User = Depends(require_instructor),
+):
+    students = db.query(User).filter(User.role.notin_(["instructor", "admin"])).order_by(User.username).all()
+    assessments = db.query(models.SimulationAssessment).order_by(models.SimulationAssessment.completed_at.desc()).all()
+    scenarios = db.query(models.VesselScenario).order_by(models.VesselScenario.created_at.desc()).all()
+    records_by_student = {}
+    for record in assessments:
+        records_by_student.setdefault(record.student_id, []).append(record)
+
+    return {
+        "students": [
+            {
+                "studentId": f"WI-{student.id:04d}",
+                "name": student.username,
+                "status": "Needs review" if records_by_student.get(student.id) and not records_by_student[student.id][0].passed else "On track",
+                "lastScenario": records_by_student[student.id][0].scenario_name if records_by_student.get(student.id) else "No completed simulations",
+                "averageScore": round(sum(item.score for item in records_by_student.get(student.id, [])) / len(records_by_student[student.id])) if records_by_student.get(student.id) else 0,
+                "simulations": len(records_by_student.get(student.id, [])),
+                "finalHealth": records_by_student[student.id][0].final_health if records_by_student.get(student.id) else None,
+                "timeTaken": records_by_student[student.id][0].time_seconds if records_by_student.get(student.id) else None,
+                "maxHeel": records_by_student[student.id][0].max_heel_angle if records_by_student.get(student.id) else None,
+                "collisions": records_by_student[student.id][0].collisions if records_by_student.get(student.id) else None,
+                "history": [
+                    {
+                        "scenario": item.scenario_name,
+                        "score": item.score,
+                        "result": "Passed" if item.passed else "Failed",
+                        "date": item.completed_at.isoformat(),
+                    }
+                    for item in records_by_student.get(student.id, [])
+                ],
+            }
+            for student in students
+        ],
+        "scenarios": [
+            {
+                "id": scenario.id,
+                "name": scenario.name,
+                "configuration": scenario.configuration,
+                "status": scenario.status,
+                "created_at": scenario.created_at.isoformat(),
+            }
+            for scenario in scenarios
+        ],
+        "assessments": [
+            {
+                "id": record.id,
+                "student": record.student.username,
+                "studentId": f"WI-{record.student_id:04d}",
+                "scenario": record.scenario_name,
+                "score": record.score,
+                "result": "Passed" if record.passed else "Failed",
+                "date": record.completed_at.isoformat(),
+                "finalHealth": record.final_health,
+                "timeSeconds": record.time_seconds,
+                "maxHeel": record.max_heel_angle,
+                "collisions": record.collisions,
+            }
+            for record in assessments
+        ],
+    }
+
+@app.post("/api/instructor/scenarios", status_code=201)
+def create_vessel_scenario(
+    scenario: ScenarioCreate,
+    db: Session = Depends(get_db),
+    instructor: User = Depends(require_instructor),
+):
+    created = models.VesselScenario(
+        name=scenario.name,
+        configuration=scenario.model_dump(exclude={"name"}),
+        created_by_id=instructor.id,
+        status="DEPLOYED",
+    )
+    db.add(created)
+    db.commit()
+    db.refresh(created)
+    return {
+        "id": created.id,
+        "name": created.name,
+        "configuration": created.configuration,
+        "status": created.status,
+        "created_at": created.created_at.isoformat(),
+    }
+
+@app.post("/api/instructor/assessments", status_code=201)
+def create_simulation_assessment(
+    assessment: AssessmentCreate,
+    db: Session = Depends(get_db),
+    student: User = Depends(get_session_user),
+):
+    if getattr(student, "role", "commander") in ("instructor", "admin"):
+        raise HTTPException(status_code=403, detail="Only student accounts can submit simulation results")
+    scenario = db.query(models.VesselScenario).filter(
+        models.VesselScenario.status == "DEPLOYED"
+    ).order_by(models.VesselScenario.created_at.desc()).first()
+    criteria = scenario.configuration if scenario else {}
+    health_passed = assessment.final_health >= criteria.get("minimum_hull_health", 80)
+    time_passed = assessment.time_seconds <= criteria.get("time_limit_minutes", float("inf")) * 60
+    max_speed = criteria.get("max_breakwater_speed")
+    speed_passed = max_speed is None or assessment.max_docking_speed <= max_speed
+    passed = assessment.success and health_passed and time_passed and speed_passed and assessment.collisions == 0
+    score = max(0, min(100, round(
+        assessment.final_health * 0.6
+        + (20 if time_passed else 0)
+        + (10 if speed_passed else 0)
+        + (10 if assessment.collisions == 0 else 0)
+    )))
+    record = models.SimulationAssessment(
+        student_id=student.id,
+        scenario_id=scenario.id if scenario else None,
+        scenario_name=scenario.name if scenario else assessment.scenario_name,
+        score=score,
+        passed=passed,
+        final_health=assessment.final_health,
+        time_seconds=assessment.time_seconds,
+        max_docking_speed=assessment.max_docking_speed,
+        max_heel_angle=assessment.max_heel_angle,
+        collisions=assessment.collisions,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return {"id": record.id, "score": score, "passed": passed}
 
 @app.put("/api/user/{username}/password")
 def update_password(username: str, data: PasswordUpdate, db: Session = Depends(get_db)):

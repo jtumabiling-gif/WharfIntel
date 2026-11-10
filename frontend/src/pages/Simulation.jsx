@@ -882,7 +882,34 @@ const Simulation = () => {
             cargo={assessmentConfig.event.cargo}
             weightKg={assessmentConfig.event.weightKg || Number(ticketForm.weight) || 3500}
             initialHealth={assessmentConfig.health}
-            onComplete={(result) => processAssessmentResult(assessmentConfig.event, assessmentConfig.type, result)}
+            onComplete={(result) => {
+              const activeEvent = assessmentConfig.event;
+              fetch(`${API_BASE}/instructor/assessments`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`
+                },
+                body: JSON.stringify({
+                  scenario_name: `${activeEvent.destination || activeEvent.cargo} Simulation`,
+                  success: result.success,
+                  final_health: result.finalHealth,
+                  time_seconds: result.timeSeconds || 0,
+                  max_docking_speed: 0,
+                  max_heel_angle: result.maxHeelAngle || 0,
+                  collisions: result.collisions || 0
+                })
+              }).then(async (response) => {
+                if (!response.ok) {
+                  const error = await response.json().catch(() => ({}));
+                  throw new Error(error.detail || 'Assessment telemetry could not be saved.');
+                }
+              }).catch((error) => {
+                console.error('Unable to save simulation assessment:', error);
+                addTerminalLog(`> ASSESSMENT RECORD ERROR: ${error.message}`, 'warning');
+              });
+              processAssessmentResult(activeEvent, assessmentConfig.type, result);
+            }}
             onSwitchToQuiz={() => setUseLegacyQuiz(true)}
           />
         )

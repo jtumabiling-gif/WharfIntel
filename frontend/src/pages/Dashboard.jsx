@@ -101,13 +101,6 @@ const PieChartIcon = () => (
   </svg>
 );
 
-const LearningIcon = () => (
-  <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" />
-    <path d="M4 5.5v16M8 7h8M8 11h7" />
-  </svg>
-);
-
 const LogoutIcon = () => (
   <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -148,8 +141,8 @@ const MoonIcon = () => (
 const Dashboard = () => {
   const navigate = useNavigate(); 
   const location = useLocation();
-  const isLmsRoute = location.pathname === '/lms' || location.pathname === '/lms/instructor';
-  const isInstructorRoute = location.pathname === '/lms/instructor';
+  const isLmsRoute = location.pathname === '/instructor';
+  const isInstructorRoute = location.pathname === '/instructor';
   
   // --- MAP CONSTRAINTS ---
   const SEA_BOUNDS = [[-15.0, 90.0], [30.0, 150.0]];
@@ -354,9 +347,6 @@ const CustomTooltip = ({ active, payload, label }) => {
               </button>
               <button className={!isLmsRoute && activeMenu === 'analytics' ? 'active' : ''} onClick={() => { setActiveMenu('analytics'); navigate('/dashboard'); }}>
                 <PieChartIcon /> <span className="nav-text">Analytics</span>
-              </button>
-              <button className={`lms-nav-btn ${isLmsRoute ? 'active' : ''}`} type="button" onClick={() => window.open(new URL('/lms', window.location.origin).href, '_blank')} aria-label="Open learning management system in a new tab" title="Open LMS in a new tab">
-                <LearningIcon /> <span className="nav-text">LMS</span>
               </button>
             </nav>
           </div>
